@@ -11,7 +11,7 @@ module.exports = {
         ]
     },
     "sms": [
-        { "send": true, "user": "...", "pass": "" } // 'Free' users only
+        { "send": false, "user": "...", "pass": "" } // 'Free' users only
     ],
     "emails": [
         "user@exemple.com"
