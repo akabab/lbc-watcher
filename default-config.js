@@ -2,18 +2,20 @@
 // Then 'npm start' command
 
 module.exports = {
-    "scrapper": {
-        "active": true,
-        "delay": 2, // min
-        "outputFile": "offers.json",
-        "urls": [
-            "https://www.leboncoin.fr/...", // url you want to match results
-        ]
-    },
-    "sms": [
-        { "send": false, "user": "...", "pass": "" } // 'Free' users only
-    ],
-    "emails": [
-        "user@exemple.com"
+  "scrapper": {
+    "active": true,
+    "delay": 2, // min
+    "outputFile": "offers.json",
+    "urls": [
+      "https://www.leboncoin.fr/recherche/..."
     ]
+  },
+  "sms": { user: "USER", "pass": "PASS" }, // FREE USERS
+  "mail": {
+    user: 'GMAIL_USER',
+    pass: 'GMAIL_PASS',
+    to: [
+      'TO_MAIL'
+    ]
+  }
 }
