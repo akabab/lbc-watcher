@@ -21,8 +21,6 @@ const ENV = {
   MAIL_SEND_TO: process.env.MAIL_SEND_TO?.split(' ') || [],
 }
 
-console.log(ENV)
-
 const Bot = new TelegramBot(ENV.TELEGRAM_TOKEN, { polling: true })
 
 // == HELPERS ==
