@@ -1,4 +1,4 @@
-const fs = require('fs')
+const fs = require('fs').promises
 const path = require('path')
 
 const Scrapper = require('./lib/scrapper')
@@ -9,7 +9,7 @@ const TelegramBot = require('node-telegram-bot-api')
 require('dotenv').config()
 
 const ENV = {
-  WATCHER_SAVE_FILE: process.env.WATCHER_SAVE_FILE,
+  WATCHER_SAVE_TO_FILE_PATH: path.join(__dirname, process.env.WATCHER_SAVE_TO_FILE_PATH || 'offers.json'),
   WATCHER_DELAY_IN_MINUTES: Number(process.env.WATCHER_DELAY_IN_MINUTES),
   WATCHER_URLS: process.env.WATCHER_URLS?.split(' ') || [],
   TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
@@ -21,26 +21,25 @@ const ENV = {
   MAIL_SEND_TO: process.env.MAIL_SEND_TO?.split(' ') || [],
 }
 
+console.log(ENV)
+
 const Bot = new TelegramBot(ENV.TELEGRAM_TOKEN, { polling: true })
 
 // == HELPERS ==
-
 const wait = ms => new Promise(r => setTimeout(r, ms))
 const flatMap = arr => arr.reduce((acc, e) => [ ...acc, ...e ], [])
-//
+
+// load OFFERS
+let G_OFFERS = {};
+(async () => {
+  try {
+    const content = await fs.readFile(ENV.WATCHER_SAVE_TO_FILE_PATH)
+    G_OFFERS = JSON.parse(content)
+  } catch { /* ignore file missing ENOENT and continue */ }
+})();
 
 
-let OFFERS = {}
-
-const file = path.join(__dirname, ENV.WATCHER_SAVE_FILE || 'offers.json')
-try {
-  OFFERS = JSON.parse(fs.readFileSync(file))
-} catch (e) {
-  console.error(e)
-}
-
-
-const filterNewOffers = offers => offers.filter(offer => !Object.keys(OFFERS).includes(offer.id))
+const filterNewOffers = offers => offers.filter(offer => !Object.keys(G_OFFERS).includes(offer.id))
 
 const telegramHandler = offers => {
   if (offers.length === 0) {
@@ -92,16 +91,17 @@ const mailHandler = offers => {
   return offers
 }
 
-const save = offers => {
-  offers.forEach(offer => OFFERS[offer.id] = offer)
+const save = async offers => {
+  offers.forEach(offer => G_OFFERS[offer.id] = offer)
 
-  fs.writeFile(file, JSON.stringify(OFFERS, null, 2), err => {
-    if (err) {
-      console.error("Failed to saved offers to %s: %s", file, err)
-    } else {
-      console.log(`${offers.length} new offers saved to %s`, file)
-    }
-  })
+  const filePath = ENV.WATCHER_SAVE_TO_FILE_PATH
+
+  try {
+    /* await */ fs.writeFile(filePath, JSON.stringify(G_OFFERS, null, 2))
+    console.log(`${offers.length} new offers saved to %s`, filePath)
+  } catch (err) {
+    console.error("Failed to saved offers to %s: %s", filePath, err)
+  }
 
   return offers
 }
