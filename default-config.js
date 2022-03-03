@@ -17,5 +17,9 @@ module.exports = {
     to: [
       'TO_MAIL'
     ]
+  },
+  "telegram": {
+    "token": "TELEGRAM_TOKEN", // from @BotFather chat
+    "chatId": "TELEGRAM_CHAT_ID" // integer
   }
 }
