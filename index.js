@@ -1,30 +1,38 @@
-const Scrapper = require('./lib/scrapper')
-const config = require('./config.js')
-
-const TelegramBot = require('node-telegram-bot-api');
-
 const fs = require('fs')
 const path = require('path')
 
-const Sms = require('./lib/sms')
-const Mail = require('./lib/mail')
+const Scrapper = require('./lib/scrapper')
+const TelegramBot = require('node-telegram-bot-api')
+// const Mail = require('./lib/mail')
+// const Sms = require('./lib/sms')
 
-// Create a bot that uses 'polling' to fetch new updates
-const { token, chatId } = config.telegram
-const Bot = new TelegramBot(token, { polling: true });
+require('dotenv').config()
 
-const urls = config.scrapper && config.scrapper.urls
+const ENV = {
+  WATCHER_SAVE_FILE: process.env.WATCHER_SAVE_FILE,
+  WATCHER_DELAY_IN_MINUTES: Number(process.env.WATCHER_DELAY_IN_MINUTES),
+  WATCHER_URLS: process.env.WATCHER_URLS?.split(' ') || [],
+  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
+  TELEGRAM_CHAT_ID: Number(process.env.TELEGRAM_CHAT_ID),
+  SMS_FREE_USER: process.env.SMS_FREE_USER,
+  SMS_FREE_PASS: process.env.SMS_FREE_PASS,
+  MAIL_GMAIL_USER: process.env.MAIL_GMAIL_USER,
+  MAIL_GMAIL_PASS: process.env.MAIL_GMAIL_PASS,
+  MAIL_SEND_TO: process.env.MAIL_SEND_TO?.split(' ') || [],
+}
+
+const Bot = new TelegramBot(ENV.TELEGRAM_TOKEN, { polling: true })
 
 // == HELPERS ==
 
-const wait = ms => new Promise(r => setTimeout(r, ms));
+const wait = ms => new Promise(r => setTimeout(r, ms))
 const flatMap = arr => arr.reduce((acc, e) => [ ...acc, ...e ], [])
 //
 
 
 let OFFERS = {}
 
-const file = path.join(__dirname, (config.scrapper && config.scrapper.outputFile) || 'offers.json')
+const file = path.join(__dirname, ENV.WATCHER_SAVE_FILE || 'offers.json')
 try {
   OFFERS = JSON.parse(fs.readFileSync(file))
 } catch (e) {
@@ -36,18 +44,18 @@ const filterNewOffers = offers => offers.filter(offer => !Object.keys(OFFERS).in
 
 const telegramHandler = offers => {
   if (offers.length === 0) {
-    console.log('No new offers at the moment');
+    console.log('No new offers at the moment')
   }
   else if (offers.length === 1) {
     const o = offers[0]
-    Bot.sendMessage(chatId, `
+    Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `
       New offer ${o.title}
       Price: ${o.price}
       Where: ${o.where}
       ${o.link}
-    `);
+    `)
   } else {
-    Bot.sendMessage(chatId, `${offers.length} new offers, go to https://www.leboncoin.fr/mes-recherches`);
+    Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `${offers.length} new offers, go to https://www.leboncoin.fr/mes-recherches`)
   }
 
   return offers
@@ -57,7 +65,7 @@ const mailHandler = offers => {
 
   const prepareMailHtml = offers => {
     return offers.map(offer => `
-      <div className='offer' style='background-color: gold; margin: 1rem; padding: 1rem;'>
+      <div className='offer' style='background-color: gold margin: 1rem padding: 1rem'>
         <h4>${offer.title}</h4>
         <p>${offer.where}</p>
         <p>${offer.date}</p>
@@ -67,8 +75,15 @@ const mailHandler = offers => {
     `).join('')
   }
 
-  Mail(config.mail).send({
-    to: config.mail.to.join(', '),
+  const options = {
+    user: ENV.MAIL_GMAIL_USER,
+    pass: ENV.MAIL_GMAIL_PASS,
+  }
+
+  const to = ENV.MAIL_SEND_TO.join(', ')
+
+  Mail(options).send({
+    to,
     subject: "[LBC-Watcher] New offers",
     text: "",
     html: prepareMailHtml(offers)
@@ -92,11 +107,14 @@ const save = offers => {
 }
 
 const loop = offers => {
+  // close browser
   Scrapper.end()
 
   // add some random delay (between 0 and 10 seconds)
   const randomSeconds = Math.random() * 10
-  const ms = (config.scrapper.delay * 60 + randomSeconds) * 1000
+  const ms = (ENV.WATCHER_DELAY_IN_MINUTES * 60 + randomSeconds) * 1000
+
+  // restart watcher
   console.log(`next run in ${ms / 1000} seconds`)
   setTimeout(run, ms)
 
@@ -106,7 +124,7 @@ const loop = offers => {
 const run = async () => {
   await Scrapper.init()
 
-  return Promise.all(urls.map(Scrapper.recoverOffers))
+  return Promise.all(ENV.WATCHER_URLS.map(Scrapper.recoverOffers))
     .then(flatMap)
     .then(filterNewOffers)
     .then(telegramHandler)
