@@ -66,7 +66,8 @@ const scrapOffers = async page => {
   await page.reload()
 
   // Get page title
-  // const title = await page.locator("head title").textContent()
+  const title = await page.locator("head title").textContent()
+  console.log({title})
 
   const datas = await page.locator('script#__NEXT_DATA__').textContent()
   const offers = JSON.parse(datas)
