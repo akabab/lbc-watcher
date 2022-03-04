@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start-dev": "nodemon index.js --ignore dump.json",
+    "lint": "standard | snazzy"
   },
   "author": "",
   "license": "ISC",
@@ -11,5 +13,10 @@
     "dotenv": "^16.0.0",
     "node-telegram-bot-api": "^0.56.0",
     "playwright-firefox": "^1.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15",
+    "standard": "^16.0.4",
+    "snazzy": "^9.0.0"
   }
 }

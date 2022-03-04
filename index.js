@@ -14,7 +14,7 @@ const flatMap = arr => arr.reduce((acc, e) => [ ...acc, ...e ], [])
 const ENV = {
   WATCHER_DUMP_FILE_PATH: path.join(__dirname, process.env.WATCHER_DUMP_FILE_PATH || 'dump.json'),
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN
 }
 
 let G_DUMP = {}
@@ -25,26 +25,26 @@ const G_ACTIVE_PAGES = {}
 const persistDumpFile = async () => {
   const filePath = ENV.WATCHER_DUMP_FILE_PATH
 
-  console.log("Persisting dump file...", filePath)
+  console.log('Persisting dump file...', filePath)
   try {
     /* await */ fs.writeFile(filePath, JSON.stringify(G_DUMP, null, 2))
-    console.log("Dump file successfully saved", filePath)
+    console.log('Dump file successfully saved', filePath)
   } catch (err) {
-    console.error("Failed to save to dump file", filePath, err)
+    console.error('Failed to save to dump file', filePath, err)
   }
 }
 
 const loadDumpFile = async () => {
   const filePath = ENV.WATCHER_DUMP_FILE_PATH
 
-  console.log("Loading dump file...", filePath)
+  console.log('Loading dump file...', filePath)
   try {
     const content = await fs.readFile(filePath)
     G_DUMP = JSON.parse(content)
-    console.log("Dump file successfully loaded", filePath)
+    console.log('Dump file successfully loaded', filePath)
   } catch (err) {
     /* ignore file missing ENOENT and continue */
-    console.log("No dump file found", filePath, err)
+    console.log('No dump file found', filePath, err)
   }
 }
 
@@ -72,8 +72,8 @@ Bot.onText(/^\/new (.+) ?(\d+)?/, (msg, match) => {
 
   const url = match[1].trim()
 
-  if (!url.startsWith("https://www.leboncoin.fr/recherche?text=")) {
-    Bot.sendMessage(chatId, "INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>")
+  if (!url.startsWith('https://www.leboncoin.fr/recherche?text=')) {
+    Bot.sendMessage(chatId, 'INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>')
     return
   }
 
@@ -85,15 +85,15 @@ Bot.onText(/^\/new (.+) ?(\d+)?/, (msg, match) => {
     // "id": 1,
     url,
     delay,
-    "active": true,
-    "lastSearchDate": new Date()
+    'active': true,
+    'lastSearchDate': new Date()
   }
 
   G_DUMP[chatId].searchs.push(newSearch)
 
   console.log(G_DUMP[chatId].searchs)
 
-  Bot.sendMessage(chatId, "NEW_SUCCESS")
+  Bot.sendMessage(chatId, 'NEW_SUCCESS')
 })
 
 Bot.onText(/^\/id$/, msg => {
@@ -108,8 +108,7 @@ Bot.onText(/^\/id$/, msg => {
 const telegramHandler = offers => {
   if (offers.length === 0) {
     console.log('No new offers at the moment')
-  }
-  else if (offers.length === 1) {
+  } else if (offers.length === 1) {
     const o = offers[0]
     Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `
       New offer ${o.title}
@@ -144,7 +143,7 @@ const scrapOffers = async page => {
   // Get page title
   // const title = await page.locator("head title").textContent()
 
-  const datas = await page.locator("script#__NEXT_DATA__").textContent()
+  const datas = await page.locator('script#__NEXT_DATA__').textContent()
   const offers = JSON.parse(datas)
     .props.pageProps.searchData.ads
     .map(parseOffer)
@@ -193,7 +192,7 @@ const main = async () => {
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   console.log(`Launching browser...`)
   const browser = await firefox.launch({
-    headless: true,
+    headless: true
     // slowMo: 70  // seems to work without bot detection at 100% rate
   })
   console.log(`Browser launched`, browser._initializer)
@@ -211,7 +210,7 @@ const main = async () => {
     await page.goto(search.url)
 
     // Accept cookies
-    await page.locator("button#didomi-notice-agree-button").click()
+    await page.locator('button#didomi-notice-agree-button').click()
     console.log(`[${search.id}] Cookies accepted`)
 
     G_ACTIVE_PAGES[key] = page
@@ -221,4 +220,3 @@ const main = async () => {
 }
 
 main()
-
