@@ -1,0 +1,4 @@
+id - Get your chat ID
+list - list all your searchs
+ls - (alias) list
+new - <URL> <DELAY_IN_SECONDS> add a new search

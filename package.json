@@ -4,11 +4,10 @@
   "description": "",
   "scripts": {
     "start": "node index.js",
-    "start-dev": "nodemon index.js --ignore dump.json",
     "lint": "standard | snazzy"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "akabab",
+  "license": "MIT",
   "dependencies": {
     "dotenv": "^16.0.0",
     "node-telegram-bot-api": "^0.56.0",

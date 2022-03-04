@@ -7,8 +7,7 @@ const TelegramBot = require('node-telegram-bot-api')
 require('dotenv').config()
 
 // == HELPERS ==
-const wait = ms => new Promise(r => setTimeout(r, ms))
-const flatMap = arr => arr.reduce((acc, e) => [ ...acc, ...e ], [])
+const wait = ms => new Promise(_ => setTimeout(_, ms))
 
 // == GLOBALS == //
 const ENV = {
@@ -16,6 +15,8 @@ const ENV = {
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN
 }
+
+let G_BROWSER
 
 let G_DUMP = {}
 
@@ -48,82 +49,6 @@ const loadDumpFile = async () => {
   }
 }
 
-// == TELEGRAM == //
-const Bot = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling: true })
-
-Bot.onText(/^(\/list|\/ls)$/, msg => {
-  const chatId = msg.chat.id
-
-  const formatSearchText = s => {
-    const searchTextMatch = s.url.match(/text=(.*)&loc/)
-    return searchTextMatch && searchTextMatch.length > 1 ? searchTextMatch[1] : '???'
-  }
-  const formatSearch = s => `| ${s.id} | [${formatSearchText(s)}](${s.url}) | ${s.delay}s | ${s.active ? 'yes' : 'no'} |`
-
-  const watcher = getWatcher(chatId)
-  const message = watcher.searchs.map(formatSearch).join('\n')
-
-  Bot.sendMessage(chatId, message)
-})
-
-Bot.onText(/^\/new (.+) ?(\d+)?/, (msg, match) => {
-  const chatId = msg.chat.id
-  console.log({match})
-
-  const url = match[1].trim()
-
-  if (!url.startsWith('https://www.leboncoin.fr/recherche?text=')) {
-    Bot.sendMessage(chatId, 'INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>')
-    return
-  }
-
-  const delay = Number(match[2]) || 300 // TODO: check for range min max and isInteger
-
-  const watcher = getWatcher(chatId)
-
-  const newSearch = {
-    // "id": 1,
-    url,
-    delay,
-    'active': true,
-    'lastSearchDate': new Date()
-  }
-
-  G_DUMP[chatId].searchs.push(newSearch)
-
-  console.log(G_DUMP[chatId].searchs)
-
-  Bot.sendMessage(chatId, 'NEW_SUCCESS')
-})
-
-Bot.onText(/^\/id$/, msg => {
-  const chatId = msg.chat.id
-
-  console.log({chatId})
-
-  // send a message to the chat acknowledging receipt of their message
-  Bot.sendMessage(chatId, `Chat ID: ${chatId}`)
-})
-
-const telegramHandler = offers => {
-  if (offers.length === 0) {
-    console.log('No new offers at the moment')
-  } else if (offers.length === 1) {
-    const o = offers[0]
-    Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `
-      New offer ${o.title}
-      Date: ${o.date}
-      Price: ${o.price} €
-      Where: ${o.where}
-      ${o.link}
-    `)
-  } else {
-    Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `${offers.length} new offers, go to https://www.leboncoin.fr/mes-recherches`)
-  }
-
-  return offers
-}
-
 // == SEARCH == //
 
 const parseOffer = offer => ({
@@ -131,7 +56,7 @@ const parseOffer = offer => ({
   date: `${offer.index_date} GMT+0100`,
   title: offer.subject,
   description: offer.body,
-  price: offer.price && offer.price[0] || 'N/A',
+  price: (offer.price && offer.price[0]) || 'N/A',
   where: offer.location.city,
   link: offer.url,
   image: offer.images.thumb_url
@@ -168,8 +93,21 @@ const searchHandler = async (search, page) => {
     search.lastSearchDate = newOffers[0].date
   }
 
-  // TELEGRAM MESSAGES
   console.log(`[${search.id}] Found ${newOffers.length} new offers`)
+
+  // TELEGRAM MESSAGES
+  if (newOffers.length === 1) {
+    const o = newOffers[0]
+    Bot.sendMessage(search.chatId, `
+      New offer ${o.title}
+      Date: ${o.date}
+      Price: ${o.price} €
+      Where: ${o.where}
+      ${o.link}
+    `)
+  } else if (newOffers.length > 1) {
+    Bot.sendMessage(search.chatId, `${offers.length} new offers, go to ${search.url}`)
+  }
 
   // PERSISTS DUMP
   persistDumpFile()
@@ -186,37 +124,94 @@ const searchHandler = async (search, page) => {
   searchHandler(search, page)
 }
 
+const startSearchWatcher = async search => {
+  // OPEN PAGE (once)
+  console.log(`[${search.id}] New page`)
+  const page = await G_BROWSER.newPage()
+  await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
+  await page.goto(search.url)
+
+  // Accept cookies
+  await page.locator('button#didomi-notice-agree-button').click()
+  console.log(`[${search.id}] Cookies accepted`)
+
+  G_ACTIVE_PAGES[search.id] = page
+
+  searchHandler(search, page)
+}
+
 const main = async () => {
   await loadDumpFile()
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
-  console.log(`Launching browser...`)
-  const browser = await firefox.launch({
+  console.log('Launching browser...')
+  G_BROWSER = await firefox.launch({
     headless: true
     // slowMo: 70  // seems to work without bot detection at 100% rate
   })
-  console.log(`Browser launched`, browser._initializer)
+  console.log('Browser launched', G_BROWSER._initializer)
 
-  // FOR ALL SEARCHS
-  const searchKeys = Object.keys(G_DUMP)
-  console.log(`Starting searchs...`, searchKeys)
-  searchKeys.map(async key => {
-    const search = G_DUMP[key]
-
-    // OPEN PAGE (once)
-    console.log(`[${search.id}] New page`)
-    const page = await browser.newPage()
-    await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
-    await page.goto(search.url)
-
-    // Accept cookies
-    await page.locator('button#didomi-notice-agree-button').click()
-    console.log(`[${search.id}] Cookies accepted`)
-
-    G_ACTIVE_PAGES[key] = page
-
-    searchHandler(search, page)
-  })
+  // START WATCHERS FOR ALL SEARCHS
+  const searchs = Object.values(G_DUMP)
+  searchs.map(startSearchWatcher) // TODO: handles errors ? Promise.all ?
 }
+
+// == TELEGRAM == //
+const Bot = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling: true })
+
+// Bot.onText(/^(\/list|\/ls)$/, msg => {
+//   const chatId = msg.chat.id
+//
+//   const formatSearchText = s => {
+//     const searchTextMatch = s.url.match(/text=(.*)&loc/)
+//     return searchTextMatch && searchTextMatch.length > 1 ? searchTextMatch[1] : '???'
+//   }
+//   const formatSearch = s => `| ${s.id} | [${formatSearchText(s)}](${s.url}) | ${s.delay}s | ${s.active ? 'yes' : 'no'} |`
+//
+//   const watcher = getWatcher(chatId)
+//   const message = watcher.searchs.map(formatSearch).join('\n')
+//
+//   Bot.sendMessage(chatId, message)
+// })
+
+Bot.onText(/^\/new (.+)/, (msg, match) => {
+  console.log('NEW')
+
+  const chatId = msg.chat.id
+  const command = match[1].split(' ')
+
+  const url = command[0]
+  const delay = Number(command[1]) || 300 // TODO: check for range min max and isInteger
+
+  if (!url.startsWith('https://www.leboncoin.fr/recherche?')) {
+    Bot.sendMessage(chatId, 'INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>')
+    return
+  }
+
+  const id = `${chatId}-${url}`
+
+  const newSearch = {
+    id,
+    chatId,
+    url,
+    delay,
+    'active': true,
+    'lastSearchDate': "2000-01-01T00:00:00.000Z"
+  }
+
+  G_DUMP[id] = newSearch
+
+  persistDumpFile()
+
+  startSearchWatcher(newSearch)
+
+  Bot.sendMessage(chatId, 'NEW_SUCCESS')
+})
+
+Bot.onText(/^\/id$/, msg => {
+  const chatId = msg.chat.id
+
+  Bot.sendMessage(chatId, `Chat ID: ${chatId}`)
+})
 
 main()
