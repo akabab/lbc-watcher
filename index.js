@@ -1,43 +1,109 @@
+// == DEPENDENCIES ==
 const fs = require('fs').promises
 const path = require('path')
-
-const Scrapper = require('./lib/scrapper')
+const { firefox } = require('playwright-firefox') // Or 'chromium' or 'webkit'.
 const TelegramBot = require('node-telegram-bot-api')
-// const Mail = require('./lib/mail')
-// const Sms = require('./lib/sms')
 
 require('dotenv').config()
-
-const ENV = {
-  WATCHER_SAVE_TO_FILE_PATH: path.join(__dirname, process.env.WATCHER_SAVE_TO_FILE_PATH || 'offers.json'),
-  WATCHER_DELAY_IN_MINUTES: Number(process.env.WATCHER_DELAY_IN_MINUTES),
-  WATCHER_URLS: process.env.WATCHER_URLS?.split(' ') || [],
-  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
-  TELEGRAM_CHAT_ID: Number(process.env.TELEGRAM_CHAT_ID),
-  SMS_FREE_USER: process.env.SMS_FREE_USER,
-  SMS_FREE_PASS: process.env.SMS_FREE_PASS,
-  MAIL_GMAIL_USER: process.env.MAIL_GMAIL_USER,
-  MAIL_GMAIL_PASS: process.env.MAIL_GMAIL_PASS,
-  MAIL_SEND_TO: process.env.MAIL_SEND_TO?.split(' ') || [],
-}
-
-const Bot = new TelegramBot(ENV.TELEGRAM_TOKEN, { polling: true })
 
 // == HELPERS ==
 const wait = ms => new Promise(r => setTimeout(r, ms))
 const flatMap = arr => arr.reduce((acc, e) => [ ...acc, ...e ], [])
 
-// load OFFERS
-let G_OFFERS = {};
-(async () => {
+// == GLOBALS == //
+const ENV = {
+  WATCHER_DUMP_FILE_PATH: path.join(__dirname, process.env.WATCHER_DUMP_FILE_PATH || 'dump.json'),
+  WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+}
+
+let G_DUMP = {}
+
+const G_ACTIVE_PAGES = {}
+
+// == DUMP == //
+const persistDumpFile = async () => {
+  const filePath = ENV.WATCHER_DUMP_FILE_PATH
+
+  console.log("Persisting dump file...", filePath)
   try {
-    const content = await fs.readFile(ENV.WATCHER_SAVE_TO_FILE_PATH)
-    G_OFFERS = JSON.parse(content)
-  } catch { /* ignore file missing ENOENT and continue */ }
-})();
+    /* await */ fs.writeFile(filePath, JSON.stringify(G_DUMP, null, 2))
+    console.log("Dump file successfully saved", filePath)
+  } catch (err) {
+    console.error("Failed to save to dump file", filePath, err)
+  }
+}
 
+const loadDumpFile = async () => {
+  const filePath = ENV.WATCHER_DUMP_FILE_PATH
 
-const filterNewOffers = offers => offers.filter(offer => !Object.keys(G_OFFERS).includes(offer.id))
+  console.log("Loading dump file...", filePath)
+  try {
+    const content = await fs.readFile(filePath)
+    G_DUMP = JSON.parse(content)
+    console.log("Dump file successfully loaded", filePath)
+  } catch (err) {
+    /* ignore file missing ENOENT and continue */
+    console.log("No dump file found", filePath, err)
+  }
+}
+
+// == TELEGRAM == //
+const Bot = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling: true })
+
+Bot.onText(/^(\/list|\/ls)$/, msg => {
+  const chatId = msg.chat.id
+
+  const formatSearchText = s => {
+    const searchTextMatch = s.url.match(/text=(.*)&loc/)
+    return searchTextMatch && searchTextMatch.length > 1 ? searchTextMatch[1] : '???'
+  }
+  const formatSearch = s => `| ${s.id} | [${formatSearchText(s)}](${s.url}) | ${s.delay}s | ${s.active ? 'yes' : 'no'} |`
+
+  const watcher = getWatcher(chatId)
+  const message = watcher.searchs.map(formatSearch).join('\n')
+
+  Bot.sendMessage(chatId, message)
+})
+
+Bot.onText(/^\/new (.+) ?(\d+)?/, (msg, match) => {
+  const chatId = msg.chat.id
+  console.log({match})
+
+  const url = match[1].trim()
+
+  if (!url.startsWith("https://www.leboncoin.fr/recherche?text=")) {
+    Bot.sendMessage(chatId, "INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>")
+    return
+  }
+
+  const delay = Number(match[2]) || 300 // TODO: check for range min max and isInteger
+
+  const watcher = getWatcher(chatId)
+
+  const newSearch = {
+    // "id": 1,
+    url,
+    delay,
+    "active": true,
+    "lastSearchDate": new Date()
+  }
+
+  G_DUMP[chatId].searchs.push(newSearch)
+
+  console.log(G_DUMP[chatId].searchs)
+
+  Bot.sendMessage(chatId, "NEW_SUCCESS")
+})
+
+Bot.onText(/^\/id$/, msg => {
+  const chatId = msg.chat.id
+
+  console.log({chatId})
+
+  // send a message to the chat acknowledging receipt of their message
+  Bot.sendMessage(chatId, `Chat ID: ${chatId}`)
+})
 
 const telegramHandler = offers => {
   if (offers.length === 0) {
@@ -47,7 +113,8 @@ const telegramHandler = offers => {
     const o = offers[0]
     Bot.sendMessage(ENV.TELEGRAM_CHAT_ID, `
       New offer ${o.title}
-      Price: ${o.price}
+      Date: ${o.date}
+      Price: ${o.price} €
       Where: ${o.where}
       ${o.link}
     `)
@@ -58,76 +125,100 @@ const telegramHandler = offers => {
   return offers
 }
 
-const mailHandler = offers => {
+// == SEARCH == //
 
-  const prepareMailHtml = offers => {
-    return offers.map(offer => `
-      <div className='offer' style='background-color: gold margin: 1rem padding: 1rem'>
-        <h4>${offer.title}</h4>
-        <p>${offer.where}</p>
-        <p>${offer.date}</p>
-        <p>${offer.price}€</p>
-        <a href='${offer.link}'>${offer.link}</a>
-      </div>
-    `).join('')
+const parseOffer = offer => ({
+  id: String(offer.list_id),
+  date: `${offer.index_date} GMT+0100`,
+  title: offer.subject,
+  description: offer.body,
+  price: offer.price && offer.price[0] || 'N/A',
+  where: offer.location.city,
+  link: offer.url,
+  image: offer.images.thumb_url
+})
+
+const scrapOffers = async page => {
+  await page.reload()
+
+  // Get page title
+  // const title = await page.locator("head title").textContent()
+
+  const datas = await page.locator("script#__NEXT_DATA__").textContent()
+  const offers = JSON.parse(datas)
+    .props.pageProps.searchData.ads
+    .map(parseOffer)
+
+  return offers
+}
+
+const searchHandler = async (search, page) => {
+  console.log(`[${search.id}] New search...`)
+
+  // SEARCH
+  const offers = await scrapOffers(page)
+
+  const lastSearchDate = new Date(search.lastSearchDate)
+
+  // HANDLE results
+  const newOffers = offers
+    .filter(o => new Date(o.date) > lastSearchDate)
+    .sort((o1, o2) => new Date(o1) < new Date(o2)) // by date, newest first
+
+  if (newOffers.length >= 1) {
+    search.lastSearchDate = newOffers[0].date
   }
 
-  const options = {
-    user: ENV.MAIL_GMAIL_USER,
-    pass: ENV.MAIL_GMAIL_PASS,
-  }
+  // TELEGRAM MESSAGES
+  console.log(`[${search.id}] Found ${newOffers.length} new offers`)
 
-  const to = ENV.MAIL_SEND_TO.join(', ')
+  // PERSISTS DUMP
+  persistDumpFile()
 
-  Mail(options).send({
-    to,
-    subject: "[LBC-Watcher] New offers",
-    text: "",
-    html: prepareMailHtml(offers)
+  // NEW SEARCH AFTER DELAY
+  // add some random delay (between -10 and 10 seconds)
+  const randomSeconds = Math.random() * 20 - 10
+  const ms = (search.delay + randomSeconds) * 1000
+
+  console.log(`[${search.id}] Next search in ${ms / 1000} seconds`)
+  await wait(ms)
+
+  // NEW SEARCH
+  searchHandler(search, page)
+}
+
+const main = async () => {
+  await loadDumpFile()
+
+  // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
+  console.log(`Launching browser...`)
+  const browser = await firefox.launch({
+    headless: true,
+    // slowMo: 70  // seems to work without bot detection at 100% rate
   })
+  console.log(`Browser launched`, browser._initializer)
 
-  return offers
+  // FOR ALL SEARCHS
+  const searchKeys = Object.keys(G_DUMP)
+  console.log(`Starting searchs...`, searchKeys)
+  searchKeys.map(async key => {
+    const search = G_DUMP[key]
+
+    // OPEN PAGE (once)
+    console.log(`[${search.id}] New page`)
+    const page = await browser.newPage()
+    await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
+    await page.goto(search.url)
+
+    // Accept cookies
+    await page.locator("button#didomi-notice-agree-button").click()
+    console.log(`[${search.id}] Cookies accepted`)
+
+    G_ACTIVE_PAGES[key] = page
+
+    searchHandler(search, page)
+  })
 }
 
-const save = async offers => {
-  offers.forEach(offer => G_OFFERS[offer.id] = offer)
+main()
 
-  const filePath = ENV.WATCHER_SAVE_TO_FILE_PATH
-
-  try {
-    /* await */ fs.writeFile(filePath, JSON.stringify(G_OFFERS, null, 2))
-    console.log(`${offers.length} new offers saved to %s`, filePath)
-  } catch (err) {
-    console.error("Failed to saved offers to %s: %s", filePath, err)
-  }
-
-  return offers
-}
-
-const loop = offers => {
-  // close browser
-  Scrapper.end()
-
-  // add some random delay (between 0 and 10 seconds)
-  const randomSeconds = Math.random() * 10
-  const ms = (ENV.WATCHER_DELAY_IN_MINUTES * 60 + randomSeconds) * 1000
-
-  // restart watcher
-  console.log(`next run in ${ms / 1000} seconds`)
-  setTimeout(run, ms)
-
-  return offers
-}
-
-const run = async () => {
-  await Scrapper.init()
-
-  return Promise.all(ENV.WATCHER_URLS.map(Scrapper.recoverOffers))
-    .then(flatMap)
-    .then(filterNewOffers)
-    .then(telegramHandler)
-    .then(save)
-    .then(loop)
-}
-
-run()

@@ -1,4 +1,4 @@
 .DS_Store
 node_modules/
-*offers.json
-.env
+*dump.json
+.env*
