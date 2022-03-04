@@ -130,6 +130,21 @@ const startSearchWatcher = async search => {
   console.log(`[${search.id}] New page`)
   const page = await G_BROWSER.newPage()
   await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
+
+  if (process.env.DEBUG) {
+    page.on('request', async r => {
+      if (search.url === r._initializer.url) {
+        console.log(search.id, 'REQUEST', { headers: await r.allHeaders() })
+      }
+    })
+
+    page.on('response', async r => {
+      if (search.url === r._initializer.url) {
+        console.log(search.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
+      }
+    })
+  }
+
   await page.goto(search.url)
 
   // Accept cookies
