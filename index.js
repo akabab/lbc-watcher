@@ -36,7 +36,7 @@ const wait = ms => new Promise(_ => setTimeout(_, ms))
 
 // == ENVIRONEMENT ==
 const ENV = {
-  AMIABOT: !!+process.env.AMIABOT || false,
+  DEBUG_BOT: !!+process.env.DEBUG_BOT || false,
   CHROME_IS_HEADLESS: !!+process.env.CHROME_IS_HEADLESS || false,
   CHROME_REMOTE_PORT: process.env.CHROME_REMOTE_PORT || 9222,
   CHROME_BINARY: (process.env.CHROME_BINARY || '/usr/bin/google-chrome-stable').replace(/ /g, '\\ '),
@@ -249,9 +249,7 @@ const startSearchWatcher = async search => {
 
   await installMouseHelper(page)
 
-  if (process.env.DEBUG) {
-    debugHandler(search, page)
-  }
+  if (process.env.DEBUG) { debugHandler(search, page) }
 
   await page.goto(search.url)
 
@@ -260,13 +258,25 @@ const startSearchWatcher = async search => {
   searchHandler(search, page)
 }
 
+const debugbotHandler = () => {
+  // await page.goto('https://antoinevastel.com/bots/')
+  // await page.waitForTimeout(5000)
+  // await page.screenshot({ path: 'fp.png', fullPage: true })
+  // await page.goto('https://antoinevastel.com/bots/datadome')
+  // await page.waitForTimeout(5000)
+  // await page.screenshot({ path: 'dd.png', fullPage: true })
+  const page = await G_BROWSER.newPage()
+
+  await page.goto('https://bot.sannysoft.com')
+  await page.waitForTimeout(5000)
+  await page.screenshot({ path: 'fp-sannysoft.png', fullPage: true })
+
+  console.log(`All done, check the screenshot. ✨`)
+  await G_BROWSER.close()
+  process.exit(0)
+}
 
 const main = async () => {
-  // const ps = exec(`pkill -f "remote-debugging-port=92"`, console.log)
-  // console.log({ps})
-  // ps.kill()
-  // return
-
   await loadDumpFile()
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
@@ -308,23 +318,7 @@ const main = async () => {
   })
 
   // DEBUG BOT DETECTION
-  if (ENV.AMIABOT) {
-    // await page.goto('https://antoinevastel.com/bots/')
-    // await page.waitForTimeout(5000)
-    // await page.screenshot({ path: 'fp.png', fullPage: true })
-    // await page.goto('https://antoinevastel.com/bots/datadome')
-    // await page.waitForTimeout(5000)
-    // await page.screenshot({ path: 'dd.png', fullPage: true })
-    const page = await G_BROWSER.newPage()
-
-    await page.goto('https://bot.sannysoft.com')
-    await page.waitForTimeout(5000)
-    await page.screenshot({ path: 'fp-sannysoft.png', fullPage: true })
-
-    console.log(`All done, check the screenshot. ✨`)
-    await G_BROWSER.close()
-    process.exit(0)
-  }
+  if (ENV.DEBUG_BOT) { await debugbotHandler() }
 
   // START WATCHERS FOR ALL SEARCHS
   const searchs = Object.values(G_DUMP)
