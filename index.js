@@ -181,24 +181,28 @@ const main = async () => {
 // == TELEGRAM == //
 const Bot = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling: true })
 
-// Bot.onText(/^(\/list|\/ls)$/, msg => {
-//   const chatId = msg.chat.id
-//
-//   const formatSearchText = s => {
-//     const searchTextMatch = s.url.match(/text=(.*)&loc/)
-//     return searchTextMatch && searchTextMatch.length > 1 ? searchTextMatch[1] : '???'
-//   }
-//   const formatSearch = s => `| ${s.id} | [${formatSearchText(s)}](${s.url}) | ${s.delay}s | ${s.active ? 'yes' : 'no'} |`
-//
-//   const watcher = getWatcher(chatId)
-//   const message = watcher.searchs.map(formatSearch).join('\n')
-//
-//   Bot.sendMessage(chatId, message)
-// })
+Bot.onText(/^(\/list|\/ls)$/, msg => {
+  const chatId = msg.chat.id
+
+  const formatSearchText = s => {
+    const searchTextMatch = s.url.match(/text=(.*)&loc/)
+    return searchTextMatch && searchTextMatch.length > 1 ? searchTextMatch[1] : '???'
+  }
+  const formatSearch = s => `| ${s.id} | [${formatSearchText(s)}](${s.url}) | ${s.delay}s | ${s.active ? 'yes' : 'no'} |`
+
+  const searchs = Object.values(G_DUMP).filter(s => s.chatId === chatId)
+
+  const message = searchs.map(formatSearch).join('\n')
+
+  Bot.sendMessage(chatId, message)
+})
+
+// stop <pid>
+// delete del <pid>
+// setdelay <pid> <delay>
+
 
 Bot.onText(/^\/new (.+)/, (msg, match) => {
-  console.log('NEW')
-
   const chatId = msg.chat.id
   const command = match[1].split(' ')
 
