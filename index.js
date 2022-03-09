@@ -54,12 +54,15 @@ const G_ACTIVE_PAGES = {}
 * Poll browser.log periodically until we see the wsEndpoint
 * that we use to connect to the browser.
 */
-const getBrowserWsEndpoint = async () => {
+const getBrowserWSEndpoint = async () => {
   const filePath = ENV.CHROME_LOGS_FILE_PATH
 
-  // try 10 times every .5 second
-  for (let i = 0; i <= 10; i++) {
-    await wait(500)
+  const timeout = 10 // seconds
+  const every = 500 // ms
+  const times = timeout * 1000 / every
+  for (let i = 0; i < times; i++) {
+    await wait(every)
+
     if (fs.existsSync(filePath)) {
       const logContents = fs.readFileSync(filePath).toString()
       const regex = /DevTools listening on (.*)/gi
@@ -280,7 +283,7 @@ const main = async () => {
 //     // exec(`pkill -f "remote-debugging-port=92"`)
 //   })
 
-  const browserWSEndpoint = await getBrowserWsEndpoint()
+  const browserWSEndpoint = await getBrowserWSEndpoint()
 
   if (!browserWSEndpoint) {
     console.error(`Could not get browser WS endpoint, check file ${ENV.CHROME_LOGS_FILE_PATH} for more infos`)
@@ -291,7 +294,7 @@ const main = async () => {
 
   G_BROWSER = await puppeteer.connect({
     browserWSEndpoint,
-    defaultViewport: null //{ width: 1200, height: 900 }
+    defaultViewport: null
   })
 
 
