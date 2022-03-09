@@ -13,6 +13,7 @@
     "dotenv": "^16.0.0",
     "ghost-cursor": "^1.1.8",
     "node-telegram-bot-api": "^0.56.0",
+    "puppeteer-core": "^13.5.0",
     "puppeteer-extra": "^3.2.3",
     "puppeteer-extra-plugin-adblocker": "^2.12.0",
     "puppeteer-extra-plugin-stealth": "^2.9.0"

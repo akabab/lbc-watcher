@@ -6,20 +6,26 @@ const { exec } = require('child_process')
 
 const { createCursor, getRandomPagePoint, installMouseHelper } = require("ghost-cursor")
 
+let puppeteer
 // puppeteer-extra is a drop-in replacement for puppeteer,
 // it augments the installed puppeteer with plugin functionality.
 // Any number of plugins can be added through `puppeteer.use()`
-const puppeteer = require('puppeteer-extra')
+if (!!+process.env.PUPPETEER_EXTRA) {
+  puppeteer = require('puppeteer-extra')
 
-// Add stealth plugin and use defaults (all tricks to hide puppeteer usage)
-const StealthPlugin = require('puppeteer-extra-plugin-stealth')
-puppeteer.use(StealthPlugin())
+  // Add stealth plugin and use defaults (all tricks to hide puppeteer usage)
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth')
+  puppeteer.use(StealthPlugin())
 
-// Add adblocker plugin to block all ads and trackers (saves bandwidth)
-const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker')
-puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
+  // Add adblocker plugin to block all ads and trackers (saves bandwidth)
+  const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker')
+  puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
 
-
+  console.log('/!\\ Using puppeteer Extra Module, with plugins')
+} else {
+  puppeteer = require('puppeteer-core')
+  console.log('/!\\ Using puppeteer CORE Module')
+}
 
 const TelegramBot = require('node-telegram-bot-api')
 
