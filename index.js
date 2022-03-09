@@ -34,8 +34,7 @@ require('dotenv').config()
 // == HELPERS ==
 const wait = ms => new Promise(_ => setTimeout(_, ms))
 
-
-// == GLOBALS == //
+// == ENVIRONEMENT ==
 const ENV = {
   AMIABOT: !!+process.env.AMIABOT || false,
   CHROME_IS_HEADLESS: !!+process.env.CHROME_IS_HEADLESS || false,
@@ -43,11 +42,13 @@ const ENV = {
   CHROME_BINARY: (process.env.CHROME_BINARY || '/usr/bin/google-chrome-stable').replace(/ /g, '\\ '),
   CHROME_USER_DATA_DIR: process.env.CHROME_USER_DATA_DIR || '/tmp/cuud',
   CHROME_LOGS_FILE_PATH: process.env.CHROME_LOGS_FILE_PATH || path.join(__dirname, 'browser.log'),
+  CHROME_WINDOW_SIZE: process.env.CHROME_WINDOW_SIZE || '1920,1080',
   WATCHER_DUMP_FILE_PATH: process.env.WATCHER_DUMP_FILE_PATH || path.join(__dirname, 'dump.json'),
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN
 }
 
+// == GLOBALS == //
 let G_BROWSER
 
 let G_DUMP = {}
@@ -269,7 +270,7 @@ const main = async () => {
   const command = ENV.CHROME_BINARY
     + (ENV.CHROME_IS_HEADLESS ? ' --headless': '')
     // + ` --display=${display._display}`
-    + ` --window-size=1920,1080`
+    + ` --window-size=${ENV.CHROME_WINDOW_SIZE}`
     + ` --user-data-dir=${ENV.CHROME_USER_DATA_DIR}`
     + ` --remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`
     + ' --no-first-run'
@@ -302,7 +303,6 @@ const main = async () => {
     browserWSEndpoint,
     defaultViewport: null
   })
-
 
   // DEBUG BOT DETECTION
   if (ENV.AMIABOT) {
