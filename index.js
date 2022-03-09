@@ -152,9 +152,32 @@ const startSearchWatcher = async search => {
 
   await page.goto(search.url)
 
-  // Accept cookies
-  await page.locator('button#didomi-notice-agree-button').click()
-  console.log(`[${search.id}] Cookies accepted`)
+  // Cookies
+  await wait(5000)
+
+  // Button "Personnaliser"
+  await page.locator("button#didomi-notice-learn-more-button").click()
+  await wait(1000)
+  // Button "Tout refuser"
+  await page.locator("button:has-text('Refuser tout')").click()
+  console.log(`[${search.id}] Cookies refused`)
+
+//   Continuer sans accepter didomi-notice-disagree-button
+
+//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-mesureaudience]").click()
+//   await wait(1000)
+//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-experienceutilisateur]").click()
+//   await wait(1000)
+//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-2fFFcc]").click()
+//   await wait(1000)
+//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-qB2C83]").click()
+//   await wait(1000)
+//
+//   await page.locator("button[aria-describedby=didomi-consent-popup-information-save]").click()
+//   await wait(1000)
+
+  // await page.locator('button#didomi-notice-agree-button').click()
+  // console.log(`[${search.id}] Cookies accepted`)
 
   G_ACTIVE_PAGES[search.id] = page
 
