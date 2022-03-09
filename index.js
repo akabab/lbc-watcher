@@ -2,7 +2,10 @@
 const fs = require('fs').promises
 const path = require('path')
 const { firefox } = require('playwright-firefox') // Or 'chromium' or 'webkit'.
+// const { chromium } = require('playwright-chromium') // Or 'chromium' or 'webkit'.
 const TelegramBot = require('node-telegram-bot-api')
+
+const browser = firefox
 
 require('dotenv').config()
 
@@ -161,10 +164,13 @@ const main = async () => {
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   console.log('Launching browser...')
-  G_BROWSER = await firefox.launch({
-    headless: true
+  G_BROWSER = await browser.launch({
+    headless: false,
+    args: ['--start-maximized']
     // slowMo: 70  // seems to work without bot detection at 100% rate
   })
+
+  // const context = await browser.newContext({ viewport: null }) ???
   console.log('Browser launched', G_BROWSER._initializer)
 
   // START WATCHERS FOR ALL SEARCHS
