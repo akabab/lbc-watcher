@@ -1,4 +1,13 @@
+# MacOS
 .DS_Store
+
+# npm
 node_modules/
+
+# Project
+cuud/
+screens/*
 *dump.json
 .env*
+*.log
+*.png
