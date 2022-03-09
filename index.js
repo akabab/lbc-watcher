@@ -154,6 +154,7 @@ const datadomeHandler = async (search, page) => {
   try {
     await page.waitForSelector('meta[content^="https://img.datadome.co/captcha"', { timeout: 10000 })
     console.log(`[${search.id}] I am a robot =(`)
+    Bot.sendMessage(search.chatId, 'I am a robot =(')
     return true
   } catch {
     console.log(`[${search.id}] I am human...`)
