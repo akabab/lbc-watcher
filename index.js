@@ -1,20 +1,43 @@
 // == DEPENDENCIES ==
-const fs = require('fs').promises
+const fs = require('fs')
+const fsp = require('fs').promises
 const path = require('path')
-const { firefox } = require('playwright-firefox') // Or 'chromium' or 'webkit'.
-// const { chromium } = require('playwright-chromium') // Or 'chromium' or 'webkit'.
-const TelegramBot = require('node-telegram-bot-api')
+const { exec } = require('child_process')
 
-const browser = firefox
+const { createCursor, getRandomPagePoint, installMouseHelper } = require("ghost-cursor")
+
+// puppeteer-extra is a drop-in replacement for puppeteer,
+// it augments the installed puppeteer with plugin functionality.
+// Any number of plugins can be added through `puppeteer.use()`
+const puppeteer = require('puppeteer-extra')
+
+// Add stealth plugin and use defaults (all tricks to hide puppeteer usage)
+const StealthPlugin = require('puppeteer-extra-plugin-stealth')
+puppeteer.use(StealthPlugin())
+
+// Add adblocker plugin to block all ads and trackers (saves bandwidth)
+const AdblockerPlugin = require('puppeteer-extra-plugin-adblocker')
+puppeteer.use(AdblockerPlugin({ blockTrackers: true }))
+
+
+
+const TelegramBot = require('node-telegram-bot-api')
 
 require('dotenv').config()
 
 // == HELPERS ==
 const wait = ms => new Promise(_ => setTimeout(_, ms))
 
+
 // == GLOBALS == //
 const ENV = {
-  WATCHER_DUMP_FILE_PATH: path.join(__dirname, process.env.WATCHER_DUMP_FILE_PATH || 'dump.json'),
+  AMIABOT: !!+process.env.AMIABOT || false,
+  CHROME_IS_HEADLESS: !!+process.env.CHROME_IS_HEADLESS || false,
+  CHROME_REMOTE_PORT: process.env.CHROME_REMOTE_PORT || 9222,
+  CHROME_BINARY: (process.env.CHROME_BINARY || '/usr/bin/google-chrome-stable').replace(/ /g, '\\ '),
+  CHROME_USER_DATA_DIR: process.env.CHROME_USER_DATA_DIR || '/tmp/cuud',
+  CHROME_LOGS_FILE_PATH: process.env.CHROME_LOGS_FILE_PATH || path.join(__dirname, 'browser.log'),
+  WATCHER_DUMP_FILE_PATH: process.env.WATCHER_DUMP_FILE_PATH || path.join(__dirname, 'dump.json'),
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN
 }
@@ -25,13 +48,40 @@ let G_DUMP = {}
 
 const G_ACTIVE_PAGES = {}
 
+// == WS ENDPOINT == //
+
+/**
+* Poll browser.log periodically until we see the wsEndpoint
+* that we use to connect to the browser.
+*/
+const getBrowserWsEndpoint = async () => {
+  const filePath = ENV.CHROME_LOGS_FILE_PATH
+
+  // try 10 times every .5 second
+  for (let i = 0; i <= 10; i++) {
+    await wait(500)
+    if (fs.existsSync(filePath)) {
+      const logContents = fs.readFileSync(filePath).toString()
+      const regex = /DevTools listening on (.*)/gi
+      const match = regex.exec(logContents)
+
+      if (match) {
+        const browserWSEndpoint = match[1]
+        return browserWSEndpoint
+      }
+    }
+  }
+
+  return undefined
+}
+
 // == DUMP == //
 const persistDumpFile = async () => {
   const filePath = ENV.WATCHER_DUMP_FILE_PATH
 
   console.log('Persisting dump file...', filePath)
   try {
-    /* await */ fs.writeFile(filePath, JSON.stringify(G_DUMP, null, 2))
+    /* await */ fsp.writeFile(filePath, JSON.stringify(G_DUMP, null, 2))
     console.log('Dump file successfully saved', filePath)
   } catch (err) {
     console.error('Failed to save to dump file', filePath, err)
@@ -43,7 +93,7 @@ const loadDumpFile = async () => {
 
   console.log('Loading dump file...', filePath)
   try {
-    const content = await fs.readFile(filePath)
+    const content = await fsp.readFile(filePath)
     G_DUMP = JSON.parse(content)
     console.log('Dump file successfully loaded', filePath)
   } catch (err) {
@@ -65,14 +115,14 @@ const parseOffer = offer => ({
   image: offer.images.thumb_url
 })
 
-const scrapOffers = async page => {
+const scrapOffers = async (search, page) => {
   await page.reload()
 
-  // Get page title
-  const title = await page.locator("head title").textContent()
-  console.log({title})
+  const screenFilePath = path.join(__dirname, `screens/${Date.now()}-screen.png`)
+  await page.screenshot({ path: screenFilePath })
 
-  const datas = await page.locator('script#__NEXT_DATA__').textContent()
+  await page.waitForSelector('script#__NEXT_DATA__')
+  const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
   const offers = JSON.parse(datas)
     .props.pageProps.searchData.ads
     .map(parseOffer)
@@ -84,7 +134,7 @@ const searchHandler = async (search, page) => {
   console.log(`[${search.id}] New search...`)
 
   // SEARCH
-  const offers = await scrapOffers(page)
+  const offers = await scrapOffers(search, page)
 
   const lastSearchDate = new Date(search.lastSearchDate)
 
@@ -136,6 +186,12 @@ const startSearchWatcher = async search => {
   const page = await G_BROWSER.newPage()
   await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
 
+  // Add a 'ghost' cursor to the page object
+  const cursor = createCursor(page) //, await getRandomPagePoint(page), false)
+  page.humanclick = cursor.click
+
+  await installMouseHelper(page)
+
   if (process.env.DEBUG) {
     page.on('request', async r => {
       if (search.url === r._initializer.url) {
@@ -153,14 +209,21 @@ const startSearchWatcher = async search => {
   await page.goto(search.url)
 
   // Cookies
-  await wait(5000)
+  await wait(3000)
 
-  // Button "Personnaliser"
-  await page.locator("button#didomi-notice-learn-more-button").click()
-  await wait(1000)
-  // Button "Tout refuser"
-  await page.locator("button:has-text('Refuser tout')").click()
-  console.log(`[${search.id}] Cookies refused`)
+  try {
+    // Button "Personnaliser"
+    await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
+    await page.humanclick("button#didomi-notice-learn-more-button")
+    await sleep(1000)
+    // Button "Tout refuser"
+    await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
+    console.log(`[${search.id}] Cookies refused`)
+    console.log('Cookies refused')
+  } catch {
+    /* Cookies popup didn't show .. continue */
+    console.log(`[${search.id}] already handled`)
+  }
 
 //   Continuer sans accepter didomi-notice-disagree-button
 
@@ -184,19 +247,72 @@ const startSearchWatcher = async search => {
   searchHandler(search, page)
 }
 
+
 const main = async () => {
+  // const ps = exec(`pkill -f "remote-debugging-port=92"`, console.log)
+  // console.log({ps})
+  // ps.kill()
+  // return
+
   await loadDumpFile()
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
-  console.log('Launching browser...')
-  G_BROWSER = await browser.launch({
-    headless: false,
-    args: ['--start-maximized']
-    // slowMo: 70  // seems to work without bot detection at 100% rate
+  const command = ENV.CHROME_BINARY
+    + (ENV.CHROME_IS_HEADLESS ? ' --headless': '')
+    // + ` --display=${display._display}`
+    + ` --window-size=1920,1080`
+    + ` --user-data-dir=${ENV.CHROME_USER_DATA_DIR}`
+    + ` --remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`
+    + ' --no-first-run'
+    + ' --no-default-browser-check'
+    + ` 2> ${ENV.CHROME_LOGS_FILE_PATH} &`
+
+  console.log('Launching browser...', command)
+  const browserProcess = exec(command, (error, stdout, stderr) => console.log({error, stdout, stderr}))
+//
+//   process.on('exit', async () => {
+//     console.log(`EXIT`)
+//
+//     await setTimeout(() => {
+//       console.log(`EXIT, killing browser process pid: ${browserProcess.pid}`)
+//       browserProcess.kill('SIGHUP')
+//     }, 5000)
+//     // exec(`pkill -f "remote-debugging-port=92"`)
+//   })
+
+  const browserWSEndpoint = await getBrowserWsEndpoint()
+
+  if (!browserWSEndpoint) {
+    console.error(`Could not get browser WS endpoint, check file ${ENV.CHROME_LOGS_FILE_PATH} for more infos`)
+    process.exit(0)
+  }
+
+  console.log(`Browser lauched and listenning to: ${browserWSEndpoint}`)
+
+  G_BROWSER = await puppeteer.connect({
+    browserWSEndpoint,
+    defaultViewport: null //{ width: 1200, height: 900 }
   })
 
-  // const context = await browser.newContext({ viewport: null }) ???
-  console.log('Browser launched', G_BROWSER._initializer)
+
+  // DEBUG BOT DETECTION
+  if (ENV.AMIABOT) {
+    // await page.goto('https://antoinevastel.com/bots/')
+    // await page.waitForTimeout(5000)
+    // await page.screenshot({ path: 'fp.png', fullPage: true })
+    // await page.goto('https://antoinevastel.com/bots/datadome')
+    // await page.waitForTimeout(5000)
+    // await page.screenshot({ path: 'dd.png', fullPage: true })
+    const page = await G_BROWSER.newPage()
+
+    await page.goto('https://bot.sannysoft.com')
+    await page.waitForTimeout(5000)
+    await page.screenshot({ path: 'fp-sannysoft.png', fullPage: true })
+
+    console.log(`All done, check the screenshot. ✨`)
+    await G_BROWSER.close()
+    process.exit(0)
+  }
 
   // START WATCHERS FOR ALL SEARCHS
   const searchs = Object.values(G_DUMP)
