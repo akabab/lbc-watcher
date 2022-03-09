@@ -125,103 +125,16 @@ const parseOffer = offer => ({
   image: offer.images.thumb_url
 })
 
-const scrapOffers = async (search, page) => {
-  await page.reload()
-
-  const screenFilePath = path.join(__dirname, `screens/${Date.now()}-screen.png`)
-  await page.screenshot({ path: screenFilePath })
-
-  await page.waitForSelector('script#__NEXT_DATA__')
-  const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
-  const offers = JSON.parse(datas)
-    .props.pageProps.searchData.ads
-    .map(parseOffer)
-
-  return offers
-}
-
-const searchHandler = async (search, page) => {
-  console.log(`[${search.id}] New search...`)
-
-  // SEARCH
-  const offers = await scrapOffers(search, page)
-
-  const lastSearchDate = new Date(search.lastSearchDate)
-
-  // HANDLE results
-  const newOffers = offers
-    .filter(o => new Date(o.date) > lastSearchDate)
-    .sort((o1, o2) => new Date(o1) < new Date(o2)) // by date, newest first
-
-  if (newOffers.length >= 1) {
-    search.lastSearchDate = newOffers[0].date
-  }
-
-  console.log(`[${search.id}] Found ${newOffers.length} new offers`)
-
-  // TELEGRAM MESSAGES
-  if (newOffers.length > 0 && newOffers.length < 5) {
-
-    newOffers.map(o => {
-      Bot.sendMessage(search.chatId, `
-        New offer ${o.title}
-        Date: ${o.date}
-        Price: ${o.price} €
-        Where: ${o.where}
-        ${o.link}
-      `)
-    })
-  } else if (newOffers.length >= 5) {
-    Bot.sendMessage(search.chatId, `${newOffers.length} new offers, go to ${search.url}`)
-  }
-
-  // PERSISTS DUMP
-  persistDumpFile()
-
-  // NEW SEARCH AFTER DELAY
-  // add some random delay (between -10 and 10 seconds)
-  const randomSeconds = Math.random() * 20 - 10
-  const ms = (search.delay + randomSeconds) * 1000
-
-  console.log(`[${search.id}] Next search in ${ms / 1000} seconds`)
-  await wait(ms)
-
-  // NEW SEARCH
-  searchHandler(search, page)
-}
-
-const startSearchWatcher = async search => {
-  // OPEN PAGE (once)
-  console.log(`[${search.id}] New page`)
-  const page = await G_BROWSER.newPage()
-  await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
-
-  // Add a 'ghost' cursor to the page object
-  const cursor = createCursor(page) //, await getRandomPagePoint(page), false)
-  page.humanclick = cursor.click
-
-  await installMouseHelper(page)
-
-  if (process.env.DEBUG) {
-    page.on('request', async r => {
-      if (search.url === r._initializer.url) {
-        console.log(search.id, 'REQUEST', { headers: await r.allHeaders() })
-      }
-    })
-
-    page.on('response', async r => {
-      if (search.url === r._initializer.url) {
-        console.log(search.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
-      }
-    })
-  }
-
-  await page.goto(search.url)
-
-  // Cookies
-  await wait(3000)
-
+const cookiesHandler = async (search, page) => {
   try {
+    // Continuer sans accepter
+    // await page.humanclick('button#didomi-notice-disagree-button').click()
+    // console.log(`[${search.id}] Cookies refused`)
+
+    // Accepter
+    // await page.humanclick('button#didomi-notice-agree-button').click()
+    // console.log(`[${search.id}] Cookies accepted`)
+
     // Button "Personnaliser"
     await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
     await page.humanclick("button#didomi-notice-learn-more-button")
@@ -232,25 +145,115 @@ const startSearchWatcher = async search => {
     console.log('Cookies refused')
   } catch {
     /* Cookies popup didn't show .. continue */
-    console.log(`[${search.id}] already handled`)
+    console.log(`[${search.id}] Cookies already handled`)
+  }
+}
+
+const datadomeHandler = async (search, page) => {
+
+  try {
+    await page.waitForSelector('meta[content^="https://img.datadome.co/captcha"', { timeout: 10000 })
+    console.log(`[${search.id}] I am a robot =(`)
+    return true
+  } catch {
+    console.log(`[${search.id}] I am human...`)
   }
 
-//   Continuer sans accepter didomi-notice-disagree-button
+  return false
+}
 
-//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-mesureaudience]").click()
-//   await wait(1000)
-//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-experienceutilisateur]").click()
-//   await wait(1000)
-//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-2fFFcc]").click()
-//   await wait(1000)
-//   await page.locator("button.didomi-components-radio__option didomi-components-radio__option--selected didomi-components-radio__option--disagree[aria-describedby=didomi-purpose-qB2C83]").click()
-//   await wait(1000)
-//
-//   await page.locator("button[aria-describedby=didomi-consent-popup-information-save]").click()
-//   await wait(1000)
+const debugHandler = async (search, page) => {
+  page.on('request', async r => {
+    if (search.url === r._initializer.url) {
+      console.log(search.id, 'REQUEST', { headers: await r.allHeaders() })
+    }
+  })
 
-  // await page.locator('button#didomi-notice-agree-button').click()
-  // console.log(`[${search.id}] Cookies accepted`)
+  page.on('response', async r => {
+    if (search.url === r._initializer.url) {
+      console.log(search.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
+    }
+  })
+}
+
+const searchHandler = async (search, page) => {
+  console.log(`[${search.id}] New search...`)
+
+  await page.reload()
+
+  // const screenFilePath = path.join(__dirname, `screens/${Date.now()}-screen.png`)
+  // await page.screenshot({ path: screenFilePath })
+
+  // Datadome
+  const iambot = await datadomeHandler(search, page)
+
+  if (!iambot) {
+    // Cookies
+    await cookiesHandler(search, page)
+
+    await page.waitForSelector('script#__NEXT_DATA__')
+    const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
+    const offers = JSON.parse(datas)
+      .props.pageProps.searchData.ads
+      .map(parseOffer)
+
+    const lastSearchDate = new Date(search.lastSearchDate)
+
+    // HANDLE results
+    const newOffers = offers
+      .filter(o => new Date(o.date) > lastSearchDate)
+      .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
+
+    console.log(`[${search.id}] Found ${newOffers.length} new offers`)
+
+    if (newOffers.length >= 1) {
+      search.lastSearchDate = newOffers[0].date
+      persistDumpFile()
+    }
+
+    // TELEGRAM MESSAGES
+    if (newOffers.length > 0 && newOffers.length < 5) {
+
+      newOffers.map(o => {
+        Bot.sendMessage(search.chatId, `
+          New offer ${o.title}
+          Date: ${o.date}
+          Price: ${o.price} €
+          Where: ${o.where}
+          ${o.link}
+        `)
+      })
+    } else if (newOffers.length >= 5) {
+      Bot.sendMessage(search.chatId, `${newOffers.length} new offers, go to ${search.url}`)
+    }
+  }
+
+  // New search after random delay (between -10 and 10 seconds)
+  const randomSeconds = Math.random() * 20 - 10
+  const ms = (search.delay + randomSeconds) * 1000
+
+  console.log(`[${search.id}] Next search in ${ms / 1000} seconds`)
+  await wait(ms)
+
+  searchHandler(search, page)
+}
+
+const startSearchWatcher = async search => {
+  // OPEN PAGE (once)
+  console.log(`[${search.id}] New page`)
+  const page = await G_BROWSER.newPage()
+  // await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
+
+  // Add a 'ghost' cursor to the page object
+  page.humanclick = createCursor(page) //, await getRandomPagePoint(page), false)
+
+  await installMouseHelper(page)
+
+  if (process.env.DEBUG) {
+    debugHandler(search, page)
+  }
+
+  await page.goto(search.url)
 
   G_ACTIVE_PAGES[search.id] = page
 
