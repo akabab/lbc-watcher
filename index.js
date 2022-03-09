@@ -100,17 +100,19 @@ const searchHandler = async (search, page) => {
   console.log(`[${search.id}] Found ${newOffers.length} new offers`)
 
   // TELEGRAM MESSAGES
-  if (newOffers.length === 1) {
-    const o = newOffers[0]
-    Bot.sendMessage(search.chatId, `
-      New offer ${o.title}
-      Date: ${o.date}
-      Price: ${o.price} €
-      Where: ${o.where}
-      ${o.link}
-    `)
-  } else if (newOffers.length > 1) {
-    Bot.sendMessage(search.chatId, `${offers.length} new offers, go to ${search.url}`)
+  if (newOffers.length > 0 && newOffers.length < 5) {
+
+    newOffers.map(o => {
+      Bot.sendMessage(search.chatId, `
+        New offer ${o.title}
+        Date: ${o.date}
+        Price: ${o.price} €
+        Where: ${o.where}
+        ${o.link}
+      `)
+    })
+  } else if (newOffers.length >= 5) {
+    Bot.sendMessage(search.chatId, `${newOffers.length} new offers, go to ${search.url}`)
   }
 
   // PERSISTS DUMP
