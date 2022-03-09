@@ -316,7 +316,10 @@ const main = async () => {
 
   // START WATCHERS FOR ALL SEARCHS
   const searchs = Object.values(G_DUMP)
-  searchs.map(startSearchWatcher) // TODO: handles errors ? Promise.all ?
+  for (let search of searchs) {
+    startSearchWatcher(search)
+    await wait(10000)
+  }
 }
 
 // == TELEGRAM == //
