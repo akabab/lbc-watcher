@@ -4,7 +4,7 @@ const fsp = require('fs').promises
 const path = require('path')
 const { exec } = require('child_process')
 
-const { createCursor, getRandomPagePoint, installMouseHelper } = require("ghost-cursor")
+const { createCursor, installMouseHelper } = require('ghost-cursor')
 
 let puppeteer
 // puppeteer-extra is a drop-in replacement for puppeteer,
@@ -58,13 +58,9 @@ let G_IAMROBOT = 0
 const G_WATCHERS = {}
 let G_WATCHERS_PID = 0
 
-
 // == TELEGRAM == //
 const setupBot = Bot => {
-
-  Bot.on('message', msg => { console.log('BOT MESSAGE:', msg, { Bot }) })
-
-  Bot.on('polling_error', error => { console.log(error.code) })
+  Bot.on('polling_error', error => { console.error(error) })
 
   // /id
   Bot.onText(/^\/id$/, msg => { Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`) })
@@ -104,13 +100,13 @@ const setupBot = Bot => {
       chatId,
       url,
       delay,
-      'active': true,
-      'lastSearchDate': "2000-01-01T00:00:00.000Z"
+      active: true,
+      lastSearchDate: '2000-01-01T00:00:00.000Z'
     }
 
     const watcher = {
       pid: G_WATCHERS_PID++,
-      search,
+      search
     }
 
     G_WATCHERS[watcher.pid] = watcher
@@ -135,7 +131,7 @@ const setupBot = Bot => {
     }
 
     if (delay < 60) {
-      Bot.sendMessage(chatId, `INVALID_DELAY: [60-99999]`)
+      Bot.sendMessage(chatId, 'INVALID_DELAY: [60-99999]')
       return
     }
 
@@ -202,7 +198,7 @@ const setupBot = Bot => {
     }
 
     // reply when user sends a message, and send him our inline keyboard as well
-    Bot.sendMessage(chatId, 'Are you sure ?', optionalParams);
+    Bot.sendMessage(chatId, 'Are you sure ?', optionalParams)
   })
 
   // Because each inline keyboard button has callback data, you can listen for the callback data and do something with them
@@ -224,32 +220,10 @@ const setupBot = Bot => {
       // FLAG Watcher to get deleted during watch loop
       G_WATCHERS[pid].SHOULD_BE_DELETED = true
 
-      Bot.answerCallbackQuery(query.id, {
-        text: `[${pid}] Successfully deleted`,
-        // show_alert: true
-      })
-
-      // Bot.editMessageReplyMarkup(query.message.chat.id,)
-
       Bot.sendMessage(query.message.chat.id, `[${pid}] Successfully deleted`, optionalParams)
     }
 
-    if (query.data === 'hello') {
-      Bot.sendMessage(query.message.chat.id, 'Hello to you too!')
-    }
-
-
     Bot.sendMessage(query.message.chat.id, '', optionalParams)
-  })
-
-  // /seppuku : kill program
-  Bot.onText(/^\/seppuku$/, async msg => {
-    const chatId = msg.chat.id
-    console.log("SEPPUKUUUUU")
-
-    await Bot.sendMessage(chatId, `Sayonara !`)
-
-    // process.exit(1)
   })
 }
 
@@ -290,7 +264,7 @@ const persistDumpFile = async () => {
   try {
     const content = Object.values(G_WATCHERS).map(w => w.search)
 
-    console.log({G_WATCHERS, content})
+    console.log({ G_WATCHERS, content })
 
     /* await */ fsp.writeFile(filePath, JSON.stringify(content, null, 2))
     console.log('Dump file successfully saved', filePath)
@@ -342,7 +316,7 @@ const cookiesHandler = async watcher => {
 
     // Button "Personnaliser"
     await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
-    await page.humanclick("button#didomi-notice-learn-more-button")
+    await page.humanclick('button#didomi-notice-learn-more-button')
     await wait(1000)
     // Button "Tout refuser"
     await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
@@ -447,8 +421,7 @@ const watcherHandler = async watcher => {
 
     // TELEGRAM MESSAGES
     if (newOffers.length > 0 && newOffers.length < 5) {
-
-      newOffers.map(o => {
+      newOffers.forEach(o => {
         G_BOT.sendMessage(search.chatId, `
           New offer ${o.title}
           Date: ${o.date}
@@ -505,7 +478,7 @@ const debugbotHandler = async () => {
   await page.waitForTimeout(5000)
   await page.screenshot({ path: 'fp-sannysoft.png', fullPage: true })
 
-  console.log(`All done, check the screenshot. ✨`)
+  console.log('All done, check the screenshot. ✨')
   await G_BROWSER.close()
   process.exit(0)
 }
@@ -513,7 +486,7 @@ const debugbotHandler = async () => {
 const main = async () => {
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   const command = ENV.CHROME_BINARY
-    + (ENV.CHROME_IS_HEADLESS ? ' --headless': '')
+    + (ENV.CHROME_IS_HEADLESS ? ' --headless' : '')
     // + ` --display=${display._display}`
     + ` --window-size=${ENV.CHROME_WINDOW_SIZE}`
     + ` --user-data-dir=${ENV.CHROME_USER_DATA_DIR}`
@@ -523,7 +496,7 @@ const main = async () => {
     + ` 2> ${ENV.CHROME_LOGS_FILE_PATH} &`
 
   console.log('Launching browser...', command)
-  const browserProcess = exec(command, (error, stdout, stderr) => console.log({error, stdout, stderr}))
+  const browserProcess = exec(command, (error, stdout, stderr) => console.log({ error, stdout, stderr }))
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
@@ -543,19 +516,18 @@ const main = async () => {
   if (ENV.DEBUG_BOT) { await debugbotHandler() }
 
   // INIT BOT
-  const pollingOffset = -10 //ENV.TELEGRAM_BOT_POLLING_OFFSET
+  const pollingOffset = ENV.TELEGRAM_BOT_POLLING_OFFSET
   const polling = pollingOffset ? { params: { offset: pollingOffset } } : true
   G_BOT = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling })
   setupBot(G_BOT)
 
   // START WATCHERS FOR ALL SEARCHS
   const searchs = (await loadDumpFile()) || []
-
-  for (let search of searchs) {
+  for (const search of searchs) {
     if (search.active) {
       const watcher = {
         pid: G_WATCHERS_PID++,
-        search,
+        search
       }
 
       G_WATCHERS[watcher.pid] = watcher
