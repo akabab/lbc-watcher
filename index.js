@@ -190,7 +190,7 @@ const setupBot = Bot => {
       // FLAG Watcher to get deleted during watch loop
       G_WATCHERS[pid].SHOULD_BE_DELETED = true
 
-      Bot.sendMessage(query.message.chat.id, `[${pid}] Successfully deleted`, optionalParams)
+      Bot.sendMessage(query.message.chat.id, `[${pid}] Successfully deleted`)
     }
   })
 }
