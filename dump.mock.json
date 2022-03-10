@@ -1,18 +1,18 @@
-{
-  "1983292230-https://www.leboncoin.fr/recherche?text=facom&category=21&locations=r_26&sort=time": {
-    "id": "1983292230-https://www.leboncoin.fr/recherche?text=facom&category=21&locations=r_26&sort=time",
+[
+  {
+    "id": "1983292230-https://www.leboncoin.fr/recherche?text=facom&locations=r_26&sort=time",
     "chatId": 1983292230,
-    "url": "https://www.leboncoin.fr/recherche?text=facom&category=21&locations=r_26&sort=time",
+    "url": "https://www.leboncoin.fr/recherche?text=facom&locations=r_26&sort=time",
     "delay": 120,
     "active": true,
     "lastSearchDate": "2000-01-01T00:00:00.000Z"
   },
-  "1983292230-https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time": {
-    "id": "1983292230-https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time",
+  {
+    "id": "1983292230-https://www.leboncoin.fr/recherche?text=facom&locations=r_26&sort=time",
     "chatId": 1983292230,
-    "url": "https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time",
-    "delay": 30,
+    "url": "https://www.leboncoin.fr/recherche?text=facom&locations=r_26&sort=time",
+    "delay": 120,
     "active": true,
     "lastSearchDate": "2000-01-01T00:00:00.000Z"
   }
-}
+]
