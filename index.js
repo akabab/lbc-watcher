@@ -184,17 +184,6 @@ const setupBot = Bot => {
 
   // Because each inline keyboard button has callback data, you can listen for the callback data and do something with them
   Bot.on('callback_query', query => {
-    // console.log({query})
-
-    // REMOVE KEYBOARD
-    const optionalParams = {
-      parse_mode: 'Markdown',
-      reply_markup: JSON.stringify({
-        remove_keyboard: true,
-        selective: true
-      })
-    }
-
     if (query.data.startsWith('DEL ')) {
       const pid = Number(query.data.split(' ')[1])
 
@@ -203,8 +192,6 @@ const setupBot = Bot => {
 
       Bot.sendMessage(query.message.chat.id, `[${pid}] Successfully deleted`, optionalParams)
     }
-
-    Bot.sendMessage(query.message.chat.id, '', optionalParams)
   })
 }
 
@@ -244,8 +231,6 @@ const persistDumpFile = async () => {
   console.log('Persisting dump file...', filePath)
   try {
     const content = Object.values(G_WATCHERS).map(w => w.search)
-
-    console.log({ G_WATCHERS, content })
 
     /* await */ fsp.writeFile(filePath, JSON.stringify(content, null, 2))
     console.log('Dump file successfully saved', filePath)
