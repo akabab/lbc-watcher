@@ -343,7 +343,7 @@ const cookiesHandler = async watcher => {
     // Button "Personnaliser"
     await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
     await page.humanclick("button#didomi-notice-learn-more-button")
-    await sleep(1000)
+    await wait(1000)
     // Button "Tout refuser"
     await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
     console.log(`[${search.id}] Cookies refused`)
