@@ -46,6 +46,14 @@ const setupBot = Bot => {
   // /id
   Bot.onText(/^\/id$/, msg => { Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`) })
 
+  Bot.onText(/^\/seppuku$/, async msg => {
+    Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`)
+
+    await Bot.sendMessage(msg.chat.id, `Bye Bye cruel world, I will return`)
+
+    process.exit(0)
+  })
+
   // /list | /ls (alias)
   Bot.onText(/^(\/list|\/ls)$/, msg => {
     const chatId = msg.chat.id
