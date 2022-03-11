@@ -415,6 +415,7 @@ const startWatcher = async watcher => {
   // OPEN PAGE (once)
   console.log(`[${watcher.search.id}] New page`)
   const page = await G_BROWSER.newPage()
+  page.setDefaultTimeout(60 * 1000) // 1 min
   // await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
 
   // Add a 'ghost' cursor to the page object
