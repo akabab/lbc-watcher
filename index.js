@@ -2,7 +2,7 @@
 const fs = require('fs')
 const fsp = require('fs').promises
 const path = require('path')
-const { exec } = require('child_process')
+const { spawn } = require('child_process')
 
 const { createCursor, installMouseHelper } = require('ghost-cursor')
 
@@ -20,7 +20,7 @@ const ENV = {
   DEBUG_BOT: !!+process.env.DEBUG_BOT || false,
   CHROME_IS_HEADLESS: !!+process.env.CHROME_IS_HEADLESS || false,
   CHROME_REMOTE_PORT: process.env.CHROME_REMOTE_PORT || 9222,
-  CHROME_BINARY: (process.env.CHROME_BINARY || '/usr/bin/google-chrome-stable').replace(/ /g, '\\ '),
+  CHROME_BINARY_PATH: process.env.CHROME_BINARY_PATH || '/usr/bin/google-chrome-stable',
   CHROME_USER_DATA_DIR: process.env.CHROME_USER_DATA_DIR || '/tmp/cuud',
   CHROME_LOGS_FILE_PATH: process.env.CHROME_LOGS_FILE_PATH || path.join(__dirname, 'browser.log'),
   CHROME_WINDOW_SIZE: process.env.CHROME_WINDOW_SIZE || '1920,1080',
@@ -31,6 +31,7 @@ const ENV = {
 }
 
 // == GLOBALS == //
+let G_BROWSER_PROCESS
 let G_BROWSER
 
 let G_BOT
@@ -38,6 +39,13 @@ let G_IAMROBOT = 0
 
 const G_WATCHERS = {}
 let G_WATCHERS_PID = 0
+
+// /!\ Execute this early (top of a file) in case of an internal crash
+process.on('exit', () => {
+
+  // If a child process exists, kill it
+  G_BROWSER_PROCESS?.kill()
+})
 
 // == TELEGRAM == //
 const setupBot = Bot => {
@@ -460,18 +468,22 @@ const debugbotHandler = async () => {
 
 const main = async () => {
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
-  const command = ENV.CHROME_BINARY
-    + (ENV.CHROME_IS_HEADLESS ? ' --headless' : '')
-    // + ` --display=${display._display}`
-    + ` --window-size=${ENV.CHROME_WINDOW_SIZE}`
-    + ` --user-data-dir=${ENV.CHROME_USER_DATA_DIR}`
-    + ` --remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`
-    + ' --no-first-run'
-    + ' --no-default-browser-check'
-    + ` 2> ${ENV.CHROME_LOGS_FILE_PATH} &`
+  const command = ENV.CHROME_BINARY_PATH
+  const args = [
+    ENV.CHROME_IS_HEADLESS ? '--headless' : '',
+    // `--display=${display._display}`,
+    `--user-data-dir=${ENV.CHROME_USER_DATA_DIR}`,
+    `--remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`,
+    '--no-first-run',
+    '--no-default-browser-check'
+  ]
+  const stderr = fs.openSync(ENV.CHROME_LOGS_FILE_PATH, 'w')
+  const options = {
+    stdio: [ 'ignore', 'ignore', stderr ]
+  }
 
   console.log('Launching browser...', command)
-  const browserProcess = exec(command, (error, stdout, stderr) => console.log({ error, stdout, stderr }))
+  G_BROWSER_PROCESS = spawn(command, args, options)
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
@@ -480,7 +492,7 @@ const main = async () => {
     process.exit(0)
   }
 
-  console.log(`Browser lauched and listenning to: ${browserWSEndpoint}`)
+  console.log(`Browser launched [pid: ${G_BROWSER_PROCESS.pid}] and listenning to: ${browserWSEndpoint}`)
 
   G_BROWSER = await puppeteer.connect({
     browserWSEndpoint,
