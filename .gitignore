@@ -6,8 +6,8 @@ node_modules/
 
 # Project
 cuud/
-screens/*
-*dump.json
+screens/
+*watchers.json
 .env*
 *.log
 *.png

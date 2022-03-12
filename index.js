@@ -37,8 +37,8 @@ let G_BROWSER
 let G_BOT
 let G_IAMROBOT = 0
 
-const G_WATCHERS = {}
-let G_WATCHERS_PID = 0
+let G_CHATS = {}
+let G_PAGES = {}
 
 // /!\ Execute this early (top of a file) in case of an internal crash
 process.on('exit', () => {
@@ -66,15 +66,18 @@ const setupBot = Bot => {
   Bot.onText(/^(\/list|\/ls)$/, msg => {
     const chatId = msg.chat.id
 
-    const format = w => `${w.pid} [url](${w.search.url}) ${w.search.delay}s ${w.search.active ? 'active' : 'stopped'} `
+    const format = w => `<${w._pid}> ${w.url} ${w.delay}s ${w.active ? 'active' : 'stopped'} `
 
-    const thisChatWatchers = Object.values(G_WATCHERS).filter(w => w.search.chatId === chatId)
+    const thisChatWatchers = G_CHATS[chatId].watchers
 
     const message = thisChatWatchers.length > 0
-      ? thisChatWatchers.map(format).join('\n')
-      : 'NO_CURRENT_WATCHERS'
+      ? thisChatWatchers
+          .filter(watcher => !!watcher === true) // remove empty (deleted) watchers
+          .map(format)
+          .join('\n')
+      : 'You are not watching anything, start a new watcher with /new command'
 
-    Bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' })
+    Bot.sendMessage(chatId, message) //, { parse_mode: 'MarkdownV2' })
   })
 
   // /new <url> <delay?>
@@ -90,10 +93,8 @@ const setupBot = Bot => {
       return
     }
 
-    const id = `${chatId}-${url}`
-
-    const search = {
-      id,
+    const newWatcher = {
+      id: `${chatId}-${url}`,
       chatId,
       url,
       delay,
@@ -101,18 +102,21 @@ const setupBot = Bot => {
       lastSearchDate: '2000-01-01T00:00:00.000Z'
     }
 
-    const watcher = {
-      pid: G_WATCHERS_PID++,
-      search
+    if (!G_CHATS[chatId]) {
+      G_CHATS[chatId] = {
+        watchers: []
+      }
     }
 
-    G_WATCHERS[watcher.pid] = watcher
+    newWatcher._pid = G_CHATS[chatId].watchers.length
+
+    G_CHATS[chatId].watchers = [ ...G_CHATS[chatId].watchers, newWatcher ]
 
     persistDumpFile()
 
-    startWatcher(watcher)
+    startWatcher(newWatcher)
 
-    Bot.sendMessage(chatId, 'NEW_SUCCESS')
+    Bot.sendMessage(chatId, `<${newWatcher._pid}> Now watching [${url}] every ${delay} seconds.`)
   })
 
   // /setdelay <pid> <delay>
@@ -120,67 +124,90 @@ const setupBot = Bot => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
     const delay = Number(match[2])
-    const watcher = G_WATCHERS[pid]
 
-    if (!watcher) {
-      Bot.sendMessage(chatId, `INVALID PID ${pid}`)
+    const thisChatWatchers = G_CHATS[chatId].watchers
+
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
 
     if (delay < 60) {
-      Bot.sendMessage(chatId, 'INVALID_DELAY: [60-99999]')
+      Bot.sendMessage(chatId, 'ERROR: INVALID_DELAY: [60-99999]')
       return
     }
 
-    G_WATCHERS[pid].search.delay = delay
+    const watcher = thisChatWatchers[pid]
+    watcher.delay = delay
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, 'SETDELAY_SUCCESS')
+    Bot.sendMessage(chatId, `<${pid}> is now set to be watched every ${delay} seconds`)
   })
 
   // /stop <pid>
   Bot.onText(/^\/stop (\d+)$/, (msg, match) => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
-    const watcher = G_WATCHERS[pid]
 
-    if (!watcher) {
-      Bot.sendMessage(chatId, `INVALID PID ${pid}`)
+    const thisChatWatchers = G_CHATS[chatId].watchers
+
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
 
-    watcher.search.active = false
+    const watcher = thisChatWatchers[pid]
+
+    if (!watcher.active) {
+      Bot.sendMessage(chatId, `<${pid}> is already 'stopped'`)
+      return
+    }
+
+    watcher.active = false
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, 'STOP_SUCCESS')
+    Bot.sendMessage(chatId, `<${pid}> is now 'stopped'`)
   })
 
   // /start <pid>
   Bot.onText(/^\/start (\d+)$/, (msg, match) => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
-    const watcher = G_WATCHERS[pid]
 
-    if (!watcher) {
-      Bot.sendMessage(chatId, `INVALID PID ${pid}`)
+    const thisChatWatchers = G_CHATS[chatId].watchers
+
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
 
-    watcher.search.active = true
+    const watcher = thisChatWatchers[pid]
+
+    if (watcher.active) {
+      Bot.sendMessage(chatId, `<${pid}> is already 'active'`)
+      return
+    }
+
+    watcher.active = true
 
     persistDumpFile()
 
-    startWatcher(watcher)
-
-    Bot.sendMessage(chatId, 'START_SUCCESS')
+    Bot.sendMessage(chatId, `<${pid}> is now 'active'`)
   })
 
   // /del <pid>
   Bot.onText(/^\/del (\d+)$/, (msg, match) => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
+
+    const thisChatWatchers = G_CHATS[chatId].watchers
+
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
+      return
+    }
 
     // define inline keyboard to send to user
     const optionalParams = {
@@ -201,12 +228,15 @@ const setupBot = Bot => {
   // Because each inline keyboard button has callback data, you can listen for the callback data and do something with them
   Bot.on('callback_query', query => {
     if (query.data.startsWith('DEL ')) {
+      const chatId = query.message.chat.id
       const pid = Number(query.data.split(' ')[1])
 
-      // FLAG Watcher to get deleted during watch loop
-      G_WATCHERS[pid].SHOULD_BE_DELETED = true
+      const thisChatWatchers = G_CHATS[chatId].watchers
 
-      Bot.sendMessage(query.message.chat.id, `[${pid}] Successfully deleted`)
+      // FLAG Watcher to get deleted during watch loop
+      thisChatWatchers[pid]._SHOULD_BE_DELETED = true
+
+      Bot.sendMessage(chatId, `<${pid}> Deleted`)
     }
   })
 }
@@ -246,9 +276,20 @@ const persistDumpFile = async () => {
 
   console.log('Persisting dump file...', filePath)
   try {
-    const content = Object.values(G_WATCHERS).map(w => w.search)
+    const content = Object.values(G_CHATS)
+      .map(chat => chat.watchers)
+      .reduce((prev, current) => [...prev, ...current], [])
+      .filter(watcher => !!watcher === true) // remove empty (deleted) watchers
+      .map(watcher => ({
+        id: watcher.id,
+        chatId: watcher.chatId,
+        url: watcher.url,
+        delay: watcher.delay,
+        active: watcher.active,
+        lastSearchDate: watcher.lastSearchDate
+      }))
 
-    /* await */ fsp.writeFile(filePath, JSON.stringify(content, null, 2))
+    fsp.writeFile(filePath, JSON.stringify(content, null, 2), { flags: 'w' })
     console.log('Dump file successfully saved', filePath)
   } catch (err) {
     console.error('Failed to save to dump file', filePath, err)
@@ -285,16 +326,16 @@ const parseOffer = offer => ({
 })
 
 const cookiesHandler = async watcher => {
-  const { search, page } = watcher
+  const page = watcher._page
 
   try {
     // Continuer sans accepter
     // await page.humanclick('button#didomi-notice-disagree-button').click()
-    // console.log(`[${search.id}] Cookies refused`)
+    // console.log(`[${watcher.id}] Cookies refused`)
 
     // Accepter
     // await page.humanclick('button#didomi-notice-agree-button').click()
-    // console.log(`[${search.id}] Cookies accepted`)
+    // console.log(`[${watcher.id}] Cookies accepted`)
 
     // Button "Personnaliser"
     await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
@@ -302,72 +343,71 @@ const cookiesHandler = async watcher => {
     await wait(1000)
     // Button "Tout refuser"
     await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
-    console.log(`[${search.id}] Cookies refused`)
+    console.log(`[${watcher.id}] Cookies refused`)
     console.log('Cookies refused')
   } catch {
     /* Cookies popup didn't show .. continue */
-    console.log(`[${search.id}] Cookies already handled`)
+    console.log(`[${watcher.id}] Cookies already handled`)
   }
 }
 
 const datadomeHandler = async watcher => {
-  const { search, page } = watcher
+  const page = watcher._page
 
   try {
     await page.waitForSelector('meta[content^="https://img.datadome.co/captcha"', { timeout: 10000 })
-    console.log(`[${search.id}] I am a robot =(`)
+    console.log(`[${watcher.id}] I am a robot =(`)
     G_IAMROBOT++
 
     if (G_IAMROBOT > 10) {
-      G_BOT.sendMessage(search.chatId, 'Leaving this world... of humans!')
+      G_BOT.sendMessage(watcher.chatId, 'Leaving this world... of humans!')
       process.exit(1)
     }
 
-    G_BOT.sendMessage(search.chatId, 'I am a robot =(')
+    G_BOT.sendMessage(watcher.chatId, 'I am a robot =(')
     return true
   } catch {
-    console.log(`[${search.id}] I am human...`)
+    console.log(`[${watcher.id}] I am human...`)
   }
 
   return false
 }
 
 const debugHandler = async watcher => {
-  const { search, page } = watcher
+  const page = watcher._page
 
   page.on('request', async r => {
-    if (search.url === r._initializer.url) {
-      console.log(search.id, 'REQUEST', { headers: await r.allHeaders() })
+    if (watcher.url === r._initializer.url) {
+      console.log(watcher.id, 'REQUEST', { headers: await r.allHeaders() })
     }
   })
 
   page.on('response', async r => {
-    if (search.url === r._initializer.url) {
-      console.log(search.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
+    if (watcher.url === r._initializer.url) {
+      console.log(watcher.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
     }
   })
 }
 
 const watcherHandler = async watcher => {
-  const { search, page } = watcher
+  const page = watcher._page
 
-  if (watcher.SHOULD_BE_DELETED) {
-    console.log(`[${search.id}] SHOULD_BE_DELETED, Aborting watcher...`)
+  if (watcher._SHOULD_BE_DELETED) {
+    console.log(`[${watcher.id}] DELETE, Aborting watcher...`)
     page.close()
-    delete G_WATCHERS[watcher.pid]
+    delete G_CHATS[watcher.chatId].watchers[watcher._pid]
     persistDumpFile()
     return
   }
 
-  // ABORT if search is not active
-  if (!search.active) {
-    console.log(`[${search.id}] STOPPED, Closing page...`)
-    delete watcher.page
+  if (!watcher.active) {
+    console.log(`[${watcher.id}] STOPPED, Closing page...`)
+    delete page
     page.close()
     return
   }
 
-  console.log(`[${search.id}] New search...`)
+  console.log(`[${watcher.id}] New search...`)
 
   await page.reload()
 
@@ -387,24 +427,24 @@ const watcherHandler = async watcher => {
       .props.pageProps.searchData.ads
       .map(parseOffer)
 
-    const lastSearchDate = new Date(search.lastSearchDate)
+    const lastSearchDate = new Date(watcher.lastSearchDate)
 
     // HANDLE results
     const newOffers = offers
       .filter(o => new Date(o.date) > lastSearchDate)
       .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
 
-    console.log(`[${search.id}] Found ${newOffers.length} new offers`)
+    console.log(`[${watcher.id}] Found ${newOffers.length} new offers`)
 
     if (newOffers.length >= 1) {
-      search.lastSearchDate = newOffers[0].date
+      watcher.lastSearchDate = newOffers[0].date
       persistDumpFile()
     }
 
     // TELEGRAM MESSAGES
     if (newOffers.length > 0 && newOffers.length < 5) {
       newOffers.forEach(o => {
-        G_BOT.sendMessage(search.chatId, `
+        G_BOT.sendMessage(watcher.chatId, `
           New offer ${o.title}
           Date: ${o.date}
           Price: ${o.price} €
@@ -413,15 +453,15 @@ const watcherHandler = async watcher => {
         `)
       })
     } else if (newOffers.length >= 5) {
-      G_BOT.sendMessage(search.chatId, `${newOffers.length} new offers, go to ${search.url}`)
+      G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)
     }
   }
 
   // New search after random delay (between -10 and 10 seconds)
   const randomSeconds = Math.random() * 20 - 10
-  const ms = (search.delay + randomSeconds) * 1000
+  const ms = (watcher.delay + randomSeconds) * 1000
 
-  console.log(`[${search.id}] Next search in ${ms / 1000} seconds`)
+  console.log(`[${watcher.id}] Next search in ${ms / 1000} seconds`)
   await wait(ms)
 
   watcherHandler(watcher)
@@ -429,7 +469,7 @@ const watcherHandler = async watcher => {
 
 const startWatcher = async watcher => {
   // OPEN PAGE (once)
-  console.log(`[${watcher.search.id}] New page`)
+  console.log(`[${watcher.id}] New page`)
   const page = await G_BROWSER.newPage()
   page.setDefaultTimeout(60 * 1000) // 1 min
   // await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
@@ -441,9 +481,9 @@ const startWatcher = async watcher => {
 
   if (process.env.DEBUG) { debugHandler(watcher) }
 
-  await page.goto(watcher.search.url)
+  await page.goto(watcher.url)
 
-  watcher.page = page
+  watcher._page = page
 
   watcherHandler(watcher)
 }
@@ -508,17 +548,24 @@ const main = async () => {
   G_BOT = new TelegramBot(ENV.TELEGRAM_BOT_TOKEN, { polling })
   setupBot(G_BOT)
 
-  // START WATCHERS FOR ALL SEARCHS
-  const searchs = (await loadDumpFile()) || []
-  for (const search of searchs) {
-    if (search.active) {
-      const watcher = {
-        pid: G_WATCHERS_PID++,
-        search
+  // LOAD AND START WATCHERS
+  const loadedWatchers = (await loadDumpFile()) || []
+
+  for (const watcher of loadedWatchers) {
+
+    // If entry doesn't exists, init it
+    if (!G_CHATS[watcher.chatId]) {
+      G_CHATS[watcher.chatId] = {
+        watchers: []
       }
+    }
 
-      G_WATCHERS[watcher.pid] = watcher
+    // ASSIGN A PID AND START THE ACTIVE ONES
+    watcher._pid = G_CHATS[watcher.chatId].watchers.length
 
+    G_CHATS[watcher.chatId].watchers = [ ...G_CHATS[watcher.chatId].watchers, watcher ]
+
+    if (watcher.active) {
       startWatcher(watcher)
 
       await wait(5000)
