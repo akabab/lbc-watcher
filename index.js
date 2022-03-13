@@ -128,7 +128,7 @@ const setupBot = Bot => {
         url: url.toString(), // urlString
         delay,
         name,
-        active: true,
+        active: false,
         lastSearchDate: '2000-01-01T00:00:00.000Z'
       }
 
@@ -531,6 +531,9 @@ const stopWatcher = async watcher => {
 }
 
 const startWatcher = async watcher => {
+  watcher.active = true
+  persistDumpFile()
+
   // OPEN PAGE (once)
   console.log(`[${formatWatcherIdentifier(watcher)}] Starting. Opening new page...`)
   const page = await G_BROWSER.newPage()
