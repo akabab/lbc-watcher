@@ -20,10 +20,14 @@
     "child_process": "^1.0.2",
     "dotenv": "^16.0.0",
     "ghost-cursor": "^1.1.8",
+    "jimp": "^0.16.1",
     "node-telegram-bot-api": "^0.56.0",
+    "opencv-wasm": "^4.3.0-10",
+    "pixelmatch": "^5.2.1",
     "puppeteer-core": "^13.5.0"
   },
   "devDependencies": {
+    "puppeteer": "^10.4.0",
     "nodemon": "^2.0.15",
     "snazzy": "^9.0.0",
     "standard": "^16.0.4"
