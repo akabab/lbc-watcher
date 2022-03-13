@@ -47,10 +47,8 @@ let G_BROWSER_PROCESS
 let G_BROWSER
 
 let G_BOT
-let G_IAMROBOT = 0
 
 let G_CHATS = {}
-let G_PAGES = {}
 
 // /!\ Execute this early (top of a file) in case of an internal crash
 process.on('exit', () => {
@@ -59,22 +57,10 @@ process.on('exit', () => {
   G_BROWSER_PROCESS?.kill()
 })
 
-// == TELEGRAM == //
+// == TELEGRAM ==
 const setupBot = Bot => {
-  Bot.on('polling_error', error => { console.error(error) })
 
-  // /id
-  Bot.onText(/^\/id$/, msg => { Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`) })
-
-  Bot.onText(/^\/seppuku$/, async msg => {
-    Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`)
-
-    await Bot.sendMessage(msg.chat.id, `Bye Bye cruel world, I will return`)
-
-    process.exit(0)
-  })
-
-  // WATCHERS
+  // FORMAT HELPERS
   const inlineCodeBlock = '`'
   const codeBlock = '```'
 
@@ -91,6 +77,20 @@ const setupBot = Bot => {
 
     return `${codeBlock}\n${header}\n${formattedWatchers}${codeBlock}`
   }
+
+  // EVENTS
+  Bot.on('polling_error', error => { console.error('BOT POLLING_ERROR', error) })
+
+  Bot.onText(/^\/seppuku$/, async msg => {
+    Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`)
+
+    await Bot.sendMessage(msg.chat.id, `Bye Bye cruel world, I will return`)
+
+    process.exit(0)
+  })
+
+  // /id
+  Bot.onText(/^\/id$/, msg => { Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`) })
 
   // /list | /ls (alias)
   Bot.onText(/^(\/list|\/ls)$/, msg => {
@@ -199,8 +199,6 @@ const setupBot = Bot => {
     }
 
     stopWatcher(watcher)
-
-    persistDumpFile()
 
     Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
@@ -525,6 +523,7 @@ const watcherHandler = async watcher => {
 
 const stopWatcher = async watcher => {
   watcher.active = false
+  persistDumpFile()
 
   watcher._page.close() // This will make eventual current page navigations to fail because page.isClosed()
   // delete watcher._page
