@@ -4,7 +4,7 @@ const fsp = require('fs').promises
 const path = require('path')
 const { spawn } = require('child_process')
 
-const { createCursor, installMouseHelper } = require('ghost-cursor')
+// const { createCursor, installMouseHelper } = require('ghost-cursor')
 
 const puppeteer = require('puppeteer-core')
 
@@ -13,15 +13,15 @@ const TelegramBot = require('node-telegram-bot-api')
 require('dotenv').config()
 
 // == HELPERS ==
-const wait = ms => new Promise(_ => setTimeout(_, ms))
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
 
 const nameMaxLength = 15
-const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
+const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}`, '') : s
 
 const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
 const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength)
-const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6)
+const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay / 3600)}h` : `~${Math.round(delay / 60)}min`)).slice(-6)
 const formatStatus = active => active ? 'active ' : 'stopped'
 
 const formatWatcherIdentifier = w => `${w.chatId}-<${formatPid(w._pid)}>-${formatName(w.name)}`
@@ -41,7 +41,7 @@ const ENV = {
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET),
-  WATCHER_MAX_RETRIES_BEFORE_ABORT: 3,
+  WATCHER_MAX_RETRIES_BEFORE_ABORT: 3
 }
 
 // == GLOBALS == //
@@ -50,18 +50,16 @@ let G_BROWSER
 
 let G_BOT
 
-let G_CHATS = {}
+const G_CHATS = {}
 
 // /!\ Execute this early (top of a file) in case of an internal crash
 process.on('exit', () => {
-
   // If a child process exists, kill it
   G_BROWSER_PROCESS?.kill()
 })
 
 // == TELEGRAM ==
 const setupBot = Bot => {
-
   // FORMAT HELPERS
   const inlineCodeBlock = '`'
   const codeBlock = '```'
@@ -70,7 +68,7 @@ const setupBot = Bot => {
   const formatWatcherInInlineCodeBlock = w => `${inlineCodeBlock}${formatWatcherAsMarkdown(w)}${inlineCodeBlock}`
 
   const formatWatchersAsMarkdownTable = watchers => {
-    const header = `| PID | NAME            |  DELAY | STATUS  |`.replace(/\|/g, '\\|')
+    const header = '| PID | NAME            |  DELAY | STATUS  |'.replace(/\|/g, '\\|')
 
     const formattedWatchers = watchers
       .filter(filterDeletedWatchers)
@@ -86,7 +84,7 @@ const setupBot = Bot => {
   Bot.onText(/^\/seppuku$/, async msg => {
     Bot.sendMessage(msg.chat.id, `Chat ID: ${msg.chat.id}`)
 
-    await Bot.sendMessage(msg.chat.id, `Bye Bye cruel world, I will return`)
+    await Bot.sendMessage(msg.chat.id, 'Bye Bye cruel world, I will return')
 
     process.exit(0)
   })
@@ -118,7 +116,7 @@ const setupBot = Bot => {
         throw new Error('Invalid URL')
       }
 
-      url.searchParams.set("sort", "time")
+      url.searchParams.set('sort', 'time')
 
       const delay = Number(args[1]) || 300
 
@@ -126,7 +124,7 @@ const setupBot = Bot => {
         throw new Error('Invalid DELAY [60-99999]')
       }
 
-      const name = args[2] || url.searchParams.get("text") || '???'
+      const name = args[2] || url.searchParams.get('text') || '???'
 
       const newWatcher = {
         id: `${chatId}-${url.toString()}`,
@@ -146,7 +144,7 @@ const setupBot = Bot => {
 
       newWatcher._pid = G_CHATS[chatId].watchers.length
 
-      G_CHATS[chatId].watchers = [ ...G_CHATS[chatId].watchers, newWatcher ]
+      G_CHATS[chatId].watchers = [...G_CHATS[chatId].watchers, newWatcher]
 
       persistDumpFile()
 
@@ -156,7 +154,6 @@ const setupBot = Bot => {
     } catch (error) {
       Bot.sendMessage(chatId, error.message)
     }
-
   })
 
   // /setname <pid> <name>
@@ -168,7 +165,7 @@ const setupBot = Bot => {
     const thisChatWatchers = G_CHATS[chatId].watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
-      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
+      Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
       return
     }
 
@@ -193,7 +190,7 @@ const setupBot = Bot => {
     const thisChatWatchers = G_CHATS[chatId].watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
-      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
+      Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
       return
     }
 
@@ -217,7 +214,7 @@ const setupBot = Bot => {
     const thisChatWatchers = G_CHATS[chatId].watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
-      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
+      Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
       return
     }
 
@@ -245,7 +242,7 @@ const setupBot = Bot => {
     const thisChatWatchers = G_CHATS[chatId].watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
-      Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
+      Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
       return
     }
 
@@ -400,8 +397,6 @@ const cookiesHandler = async watcher => {
 }
 
 const datadomeHandler = async watcher => {
-  const page = watcher._page
-
   console.log('im a bot')
   await wait(20000)
 
@@ -581,7 +576,7 @@ const main = async () => {
   ]
   const stderr = fs.openSync(ENV.CHROME_LOGS_FILE_PATH, 'w')
   const options = {
-    stdio: [ 'ignore', 'ignore', stderr ]
+    stdio: ['ignore', 'ignore', stderr]
   }
 
   console.log('Launching browser...', command)
@@ -614,7 +609,6 @@ const main = async () => {
   const loadedWatchers = (await loadDumpFile()) || []
 
   for (const watcher of loadedWatchers) {
-
     // If entry doesn't exists, init it
     if (!G_CHATS[watcher.chatId]) {
       G_CHATS[watcher.chatId] = {
@@ -625,7 +619,7 @@ const main = async () => {
     // ASSIGN A PID AND START THE ACTIVE ONES
     watcher._pid = G_CHATS[watcher.chatId].watchers.length
 
-    G_CHATS[watcher.chatId].watchers = [ ...G_CHATS[watcher.chatId].watchers, watcher ]
+    G_CHATS[watcher.chatId].watchers = [...G_CHATS[watcher.chatId].watchers, watcher]
 
     if (watcher.active) {
       startWatcher(watcher)

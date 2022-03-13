@@ -1,23 +1,23 @@
 // == DEPENDENCIES ==
 const fs = require('fs')
-const path = require('path')
-const { exec, spawn } = require('child_process')
+const { spawn } = require('child_process')
 const { O_WRONLY, O_CREAT, O_TRUNC } = require('fs').constants
+
+let G_BROWSER_PROCESS
 
 // /!\ Execute this early (top of a file) in case of an internal crash
 process.on('exit', () => {
-
   // If a child process exists, kill it
   G_BROWSER_PROCESS?.kill()
 })
 
 const ENV = {
-  CHROME_BINARY: '/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome',
+  CHROME_BINARY: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   CHROME_REMOTE_PORT: 9229,
   CHROME_LOGS_FILE_PATH: './chrome.log'
 }
 
-const wait = ms => new Promise(_ => setTimeout(_, ms))
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const getBrowserWSEndpoint = async () => {
   const filePath = ENV.CHROME_LOGS_FILE_PATH
@@ -47,7 +47,7 @@ const main = async () => {
   const command = ENV.CHROME_BINARY
   const args = [
     `--remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`,
-    `--user-data-dir=/tmp/cuud/`,
+    '--user-data-dir=/tmp/cuud/',
     '--no-first-run',
     '--no-default-browser-check'
   ]
@@ -55,19 +55,19 @@ const main = async () => {
   const err = fs.openSync(ENV.CHROME_LOGS_FILE_PATH, O_WRONLY, O_CREAT, O_TRUNC)
 
   const options = {
-    stdio: [ 'ignore', 'ignore', err ]
+    stdio: ['ignore', 'ignore', err]
   }
 
   console.log('Launching browser...', command)
   G_BROWSER_PROCESS = spawn(command, args, options)
 
-//   browserProcess.stdout.on('data', (data) => {
-//     console.log(`ps stdout: ${data}`)
-//   })
-//
-//   browserProcess.stderr.on('data', (data) => {
-//     console.error(`ps stderr: ${data}`)
-//   })
+  //   browserProcess.stdout.on('data', (data) => {
+  //     console.log(`ps stdout: ${data}`)
+  //   })
+  //
+  //   browserProcess.stderr.on('data', (data) => {
+  //     console.error(`ps stderr: ${data}`)
+  //   })
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
