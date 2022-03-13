@@ -1,6 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api')
 const Bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true })
 
+const G_WATCHERS = [
+  { pid: 0, name: "dewalt", delay: 312, active: true, "url": "https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time" },
+  { pid: 1, name: "van", delay: 14*3600 + 512, active: false, "url": "https://www.leboncoin.fr/recherche?category=5&text=VAN%20OR%20KANGOO%20OR%20CADDY%20OR%20BERLINGO%20OR%20PARTNER%20OR%20TRAFFIC%20OR%20TRAVELER%20OR%20L1H1&locations=r_26&price=5000-15000&mileage=min-170000&sort=time" },
+  { pid: 123, name: "facomORfacoORfalcomORfalcolm", delay: 35*60, active: true, "url": "https://www.leboncoin.fr/recherche?text=scie&locations=r_26&sort=time" },
+]
+
 Bot.on('polling_error', error => { console.error(error) })
 
 Bot.on('message', message => {
@@ -10,7 +16,21 @@ Bot.on('message', message => {
 Bot.onText(/\/md/, message => {
   const chatId = message.chat.id
 
-  Bot.sendMessage(chatId, 'Markdown [link](https://upload.wikimedia.org)', { parse_mode: 'MarkdownV2' })
+  const nameMaxLength = 15
+  const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
+
+  const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
+  const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength).replace('...', '\\.\\.\\.')
+  const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6).replace(/(>|~)/g, '\\$1')
+  const formatStatus = active => active ? 'active ' : 'stopped'
+
+  const formatWatcher = w => `| ${formatPid(w.pid)} | ${formatName(w.name)} | ${formatDelay(w.delay)} | ${formatStatus(w.active)} |`
+
+  const header = `| PID | NAME            |  DELAY | STATUS  |`
+  const codeBlock = '```'
+  const markdown = `${codeBlock}\n${header}\n${G_WATCHERS.map(formatWatcher).join('\n')}${codeBlock}`.replace(/\|/g, '\\|')
+
+  Bot.sendMessage(chatId, markdown, { parse_mode: 'MarkdownV2' })
 })
 
 Bot.onText(/\/love/, message => {
