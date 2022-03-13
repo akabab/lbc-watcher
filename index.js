@@ -14,6 +14,8 @@ require('dotenv').config()
 
 // == HELPERS ==
 const wait = ms => new Promise(_ => setTimeout(_, ms))
+const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
+
 const nameMaxLength = 15
 const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
 
@@ -118,14 +120,18 @@ const setupBot = Bot => {
 
       url.searchParams.set("sort", "time")
 
-      const delay = Number(args[1]) || 300 // TODO: check for range min max and isInteger
+      const delay = Number(args[1]) || 300
+
+      if (!Number.isInteger(delay) || delay < 60) {
+        throw new Error('Invalid DELAY [60-99999]')
+      }
 
       const name = args[2] || url.searchParams.get("text") || '???'
 
       const newWatcher = {
-        id: `${chatId}-${url}`,
+        id: `${chatId}-${url.toString()}`,
         chatId,
-        url: url.toString(), // urlString
+        url: url.toString(),
         delay,
         name,
         active: false,
@@ -370,49 +376,36 @@ const parseOffer = offer => ({
 const cookiesHandler = async watcher => {
   const page = watcher._page
 
-  try {
-    // Continuer sans accepter
-    // await page.humanclick('button#didomi-notice-disagree-button').click()
-    // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
+  const cookiesPopup = await page.$('#didomi-popup')
 
-    // Accepter
-    // await page.humanclick('button#didomi-notice-agree-button').click()
-    // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies accepted`)
-
-    // Button "Personnaliser"
-    await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
-    await page.humanclick('button#didomi-notice-learn-more-button')
-    await wait(1000)
-    // Button "Tout refuser"
-    await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
-    console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
-    console.log('Cookies refused')
-  } catch {
-    /* Cookies popup didn't show .. continue */
+  if (!cookiesPopup) {
     console.log(`[${formatWatcherIdentifier(watcher)}] Cookies already handled`)
+    return
   }
+
+  // Continuer sans accepter
+  await page.$('button#didomi-notice-disagree-button').click({ delay: getRandomInt(100, 300) })
+  console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
+
+  // Accepter
+  // await page.$('button#didomi-notice-agree-button').click({ delay: getRandomInt(100, 300) })
+  // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies accepted`)
+
+  // Button "Personnaliser"
+  // await page.$('button#didomi-notice-learn-more-button').click({ delay: getRandomInt(100, 300) })
+  // await wait(1000)
+  // Button "Tout refuser"
+  // await page.$('button[aria-label="Refuser notre traitement des données et fermer"]').click({ delay: getRandomInt(100, 300) })
+  // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
 }
 
 const datadomeHandler = async watcher => {
   const page = watcher._page
 
-  try {
-    await page.waitForSelector('meta[content^="https://img.datadome.co/captcha"', { timeout: 10000 })
-    console.log(`[${formatWatcherIdentifier(watcher)}] I am a robot =(`)
-    G_IAMROBOT++
+  console.log('im a bot')
+  await wait(20000)
 
-    if (G_IAMROBOT > 10) {
-      G_BOT.sendMessage(watcher.chatId, 'Leaving this world... of humans!')
-      process.exit(1)
-    }
-
-    G_BOT.sendMessage(watcher.chatId, 'I am a robot =(')
-    return true
-  } catch {
-    console.log(`[${formatWatcherIdentifier(watcher)}] I am human...`)
-  }
-
-  return false
+  throw new Error('Datadome: I am a bot!')
 }
 
 const debugHandler = async watcher => {
@@ -448,18 +441,22 @@ const watcherHandler = async watcher => {
   console.log(`[${formatWatcherIdentifier(watcher)}] New search...`)
 
   try {
-    await (page.url() === watcher.url ? page.reload() : page.goto(watcher.url))
+    const options = { waitUntil: 'domcontentloaded' }
+
+    await (page.url() === watcher.url ? page.reload(options) : page.goto(watcher.url, options))
 
     // Datadome
-    const iambot = await datadomeHandler(watcher)
+    const dd = await page.$('meta[content^="https://img.datadome.co/captcha"')
 
-    if (iambot) { throw new Error('Datadome: I am a bot!') }
+    if (dd) { await datadomeHandler(watcher) }
 
     // Cookies
+    await wait(1500)
     await cookiesHandler(watcher)
 
-    await page.waitForSelector('script#__NEXT_DATA__')
-    const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
+    await wait(1000)
+    const nd = await page.$('script#__NEXT_DATA__')
+    const datas = await page.evaluate(nd => nd.innerHTML, nd)
     const offers = JSON.parse(datas)
       .props.pageProps.searchData.ads
       .map(parseOffer)
