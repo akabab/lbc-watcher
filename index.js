@@ -14,6 +14,15 @@ require('dotenv').config()
 
 // == HELPERS ==
 const wait = ms => new Promise(_ => setTimeout(_, ms))
+const nameMaxLength = 15
+const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
+
+const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
+const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength).replace('...', '\\.\\.\\.')
+const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6).replace(/(>|~)/g, '\\$1')
+const formatStatus = active => active ? 'active ' : 'stopped'
+
+const formatWatcherIdentifier = w => `${w.chatId}-<${w._pid}>-${w.name}`
 
 // == ENVIRONEMENT ==
 const ENV = {
@@ -63,18 +72,11 @@ const setupBot = Bot => {
   })
 
   // WATCHERS
-  const nameMaxLength = 15
-  const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
   const inlineCodeBlock = '`'
   const codeBlock = '```'
 
-  const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
-  const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength).replace('...', '\\.\\.\\.')
-  const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6).replace(/(>|~)/g, '\\$1')
-  const formatStatus = active => active ? 'active ' : 'stopped'
-
   const formatWatcherAsMarkdown = w => `| ${formatPid(w._pid)} | ${formatName(w.name)} | ${formatDelay(w.delay)} | ${formatStatus(w.active)} |`.replace(/\|/g, '\\|')
-  const formatWatcher = w => `${inlineCodeBlock}${formatWatcherAsMarkdown(w)}${inlineCodeBlock}`
+  const formatWatcherInInlineCodeBlock = w => `${inlineCodeBlock}${formatWatcherAsMarkdown(w)}${inlineCodeBlock}`
 
   const formatWatchersAsMarkdownTable = watchers => {
     const header = `| PID | NAME            |  DELAY | STATUS  |`.replace(/\|/g, '\\|')
@@ -136,7 +138,7 @@ const setupBot = Bot => {
 
       startWatcher(newWatcher)
 
-      Bot.sendMessage(chatId, formatWatcher(newWatcher), { parse_mode: 'MarkdownV2' })
+      Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(newWatcher), { parse_mode: 'MarkdownV2' })
     } catch (error) {
       Bot.sendMessage(chatId, error.message)
     }
@@ -166,7 +168,7 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
+    Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /stop <pid>
@@ -192,7 +194,7 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
+    Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /start <pid>
@@ -218,7 +220,7 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
+    Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /del <pid>
@@ -356,11 +358,11 @@ const cookiesHandler = async watcher => {
   try {
     // Continuer sans accepter
     // await page.humanclick('button#didomi-notice-disagree-button').click()
-    // console.log(`[${watcher.id}] Cookies refused`)
+    // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
 
     // Accepter
     // await page.humanclick('button#didomi-notice-agree-button').click()
-    // console.log(`[${watcher.id}] Cookies accepted`)
+    // console.log(`[${formatWatcherIdentifier(watcher)}] Cookies accepted`)
 
     // Button "Personnaliser"
     await page.waitForSelector('#didomi-notice-learn-more-button', { timeout: 3000 })
@@ -368,11 +370,11 @@ const cookiesHandler = async watcher => {
     await wait(1000)
     // Button "Tout refuser"
     await page.humanclick('button[aria-label="Refuser notre traitement des données et fermer"]')
-    console.log(`[${watcher.id}] Cookies refused`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] Cookies refused`)
     console.log('Cookies refused')
   } catch {
     /* Cookies popup didn't show .. continue */
-    console.log(`[${watcher.id}] Cookies already handled`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] Cookies already handled`)
   }
 }
 
@@ -381,7 +383,7 @@ const datadomeHandler = async watcher => {
 
   try {
     await page.waitForSelector('meta[content^="https://img.datadome.co/captcha"', { timeout: 10000 })
-    console.log(`[${watcher.id}] I am a robot =(`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] I am a robot =(`)
     G_IAMROBOT++
 
     if (G_IAMROBOT > 10) {
@@ -392,7 +394,7 @@ const datadomeHandler = async watcher => {
     G_BOT.sendMessage(watcher.chatId, 'I am a robot =(')
     return true
   } catch {
-    console.log(`[${watcher.id}] I am human...`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] I am human...`)
   }
 
   return false
@@ -417,8 +419,16 @@ const debugHandler = async watcher => {
 const watcherHandler = async watcher => {
   const page = watcher._page
 
+  if (watcher._retries > 3) {
+    console.log(`[${formatWatcherIdentifier(watcher)}] Too much retries, aborting watcher...`)
+    watcher.active = false
+    persistDumpFile()
+    page.close()
+    return
+  }
+
   if (watcher._SHOULD_BE_DELETED) {
-    console.log(`[${watcher.id}] DELETE, Aborting watcher...`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] DELETE, Aborting watcher...`)
     page.close()
     delete G_CHATS[watcher.chatId].watchers[watcher._pid]
     persistDumpFile()
@@ -426,89 +436,92 @@ const watcherHandler = async watcher => {
   }
 
   if (!watcher.active) {
-    console.log(`[${watcher.id}] STOPPED, Closing page...`)
+    console.log(`[${formatWatcherIdentifier(watcher)}] STOPPED, Closing page...`)
     delete page
     page.close()
     return
   }
 
-  console.log(`[${watcher.id}] New search...`)
+  console.log(`[${formatWatcherIdentifier(watcher)}] New search...`)
 
-  await page.reload()
+  try {
+    await (page.url() === watcher.url ? page.reload() : page.goto(watcher.url))
 
-  // const screenFilePath = path.join(__dirname, `screens/${Date.now()}-screen.png`)
-  // await page.screenshot({ path: screenFilePath })
+    // Datadome
+    const iambot = await datadomeHandler(watcher)
 
-  // Datadome
-  const iambot = await datadomeHandler(watcher)
+    if (!iambot) {
+      // Cookies
+      await cookiesHandler(watcher)
 
-  if (!iambot) {
-    // Cookies
-    await cookiesHandler(watcher)
+      await page.waitForSelector('script#__NEXT_DATA__')
+      const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
+      const offers = JSON.parse(datas)
+        .props.pageProps.searchData.ads
+        .map(parseOffer)
 
-    await page.waitForSelector('script#__NEXT_DATA__')
-    const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
-    const offers = JSON.parse(datas)
-      .props.pageProps.searchData.ads
-      .map(parseOffer)
+      const lastSearchDate = new Date(watcher.lastSearchDate)
 
-    const lastSearchDate = new Date(watcher.lastSearchDate)
+      // HANDLE results
+      const newOffers = offers
+        .filter(o => new Date(o.date) > lastSearchDate)
+        .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
 
-    // HANDLE results
-    const newOffers = offers
-      .filter(o => new Date(o.date) > lastSearchDate)
-      .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
+      console.log(`[${formatWatcherIdentifier(watcher)}] Found ${newOffers.length} new offers`)
 
-    console.log(`[${watcher.id}] Found ${newOffers.length} new offers`)
+      if (newOffers.length >= 1) {
+        watcher.lastSearchDate = newOffers[0].date
+        persistDumpFile()
+      }
 
-    if (newOffers.length >= 1) {
-      watcher.lastSearchDate = newOffers[0].date
-      persistDumpFile()
+      // TELEGRAM MESSAGES
+      if (newOffers.length > 0 && newOffers.length < 5) {
+        newOffers.forEach(o => {
+          G_BOT.sendMessage(watcher.chatId, `
+            New offer ${o.title}
+            Date: ${o.date}
+            Price: ${o.price} €
+            Where: ${o.where}
+            ${o.link}
+          `)
+        })
+      } else if (newOffers.length >= 5) {
+        G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)
+      }
     }
 
-    // TELEGRAM MESSAGES
-    if (newOffers.length > 0 && newOffers.length < 5) {
-      newOffers.forEach(o => {
-        G_BOT.sendMessage(watcher.chatId, `
-          New offer ${o.title}
-          Date: ${o.date}
-          Price: ${o.price} €
-          Where: ${o.where}
-          ${o.link}
-        `)
-      })
-    } else if (newOffers.length >= 5) {
-      G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)
-    }
+    // New search after random delay (between -10 and 10 seconds)
+    const randomSeconds = Math.random() * 20 - 10
+    const ms = (watcher.delay + randomSeconds) * 1000
+
+    console.log(`[${formatWatcherIdentifier(watcher)}] Next search in ${ms / 1000} seconds`)
+    await wait(ms)
+
+    watcher._retries = 0
+    watcherHandler(watcher)
+  } catch (error) {
+    console.error(`[${formatWatcherIdentifier(watcher)}] Error: ${error.message}, Retrying..`)
+    watcher._retries++
+    watcherHandler(watcher)
   }
-
-  // New search after random delay (between -10 and 10 seconds)
-  const randomSeconds = Math.random() * 20 - 10
-  const ms = (watcher.delay + randomSeconds) * 1000
-
-  console.log(`[${watcher.id}] Next search in ${ms / 1000} seconds`)
-  await wait(ms)
-
-  watcherHandler(watcher)
 }
 
 const startWatcher = async watcher => {
   // OPEN PAGE (once)
-  console.log(`[${watcher.id}] New page`)
+  console.log(`[${formatWatcherIdentifier(watcher)}] New page`)
   const page = await G_BROWSER.newPage()
+
   page.setDefaultTimeout(60 * 1000) // 1 min
   // await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0' })
 
   // Add a 'ghost' cursor to the page object
-  page.humanclick = createCursor(page) //, await getRandomPagePoint(page), false)
-
-  await installMouseHelper(page)
+  // page.humanclick = createCursor(page) //, await getRandomPagePoint(page), false)
+  // await installMouseHelper(page)
 
   if (process.env.DEBUG) { debugHandler(watcher) }
 
-  await page.goto(watcher.url)
-
   watcher._page = page
+  watcher._retries = 0
 
   watcherHandler(watcher)
 }
