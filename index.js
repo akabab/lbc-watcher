@@ -436,8 +436,14 @@ const debugHandler = async watcher => {
 const watcherHandler = async watcher => {
   const page = watcher._page
 
-  if (!watcher.active || watcher._page.isClosed() || watcher._SHOULD_BE_DELETED) {
-    console.log(`[${formatWatcherIdentifier(watcher)}] !watcher.active || watcher._page.isClosed() || watcher._SHOULD_BE_DELETED, aborting watcher...`)
+  if (!watcher.active || watcher._SHOULD_BE_DELETED) {
+    console.log(`[${formatWatcherIdentifier(watcher)}] !watcher.active || watcher._SHOULD_BE_DELETED, aborting watcher...`)
+    return
+  }
+
+  if (watcher._page.isClosed() && watcher.active) {
+    console.log(`[${formatWatcherIdentifier(watcher)}] Page may have been closed manually or crashed, restarting watcher...`)
+    startWatcher(watcher)
     return
   }
 
