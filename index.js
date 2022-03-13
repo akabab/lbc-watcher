@@ -62,87 +62,111 @@ const setupBot = Bot => {
     process.exit(0)
   })
 
+  // WATCHERS
+  const nameMaxLength = 15
+  const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
+  const inlineCodeBlock = '`'
+  const codeBlock = '```'
+
+  const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
+  const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength).replace('...', '\\.\\.\\.')
+  const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6).replace(/(>|~)/g, '\\$1')
+  const formatStatus = active => active ? 'active ' : 'stopped'
+
+  const formatWatcherAsMarkdown = w => `| ${formatPid(w._pid)} | ${formatName(w.name)} | ${formatDelay(w.delay)} | ${formatStatus(w.active)} |`.replace(/\|/g, '\\|')
+  const formatWatcher = w => `${inlineCodeBlock}${formatWatcherAsMarkdown(w)}${inlineCodeBlock}`
+
+  const formatWatchersAsMarkdownTable = watchers => {
+    const header = `| PID | NAME            |  DELAY | STATUS  |`.replace(/\|/g, '\\|')
+
+    return `${codeBlock}\n${header}\n${watchers.map(formatWatcherAsMarkdown).join('\n')}${codeBlock}`
+  }
+
   // /list | /ls (alias)
   Bot.onText(/^(\/list|\/ls)$/, msg => {
     const chatId = msg.chat.id
 
-    const format = w => `<${w._pid}> ${w.url} ${w.delay}s ${w.active ? 'active' : 'stopped'} `
-
     const thisChatWatchers = G_CHATS[chatId].watchers
 
     const message = thisChatWatchers.length > 0
-      ? thisChatWatchers
-          .filter(watcher => !!watcher === true) // remove empty (deleted) watchers
-          .map(format)
-          .join('\n')
+      ? formatWatchersAsMarkdownTable(thisChatWatchers)
       : 'You are not watching anything, start a new watcher with /new command'
 
-    Bot.sendMessage(chatId, message) //, { parse_mode: 'MarkdownV2' })
+    Bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' })
   })
 
-  // /new <url> <delay?>
+  // /new <url> <delay?> <name?>
   Bot.onText(/^\/new (.+)/, (msg, match) => {
     const chatId = msg.chat.id
     const args = match[1].split(' ')
 
-    const url = args[0]
-    const delay = Number(args[1]) || 300 // TODO: check for range min max and isInteger
-
-    if (!url.startsWith('https://www.leboncoin.fr/recherche?')) {
-      Bot.sendMessage(chatId, 'INVALID_FORMAT /new <URL> <?DELAY_IN_SECONDS>')
-      return
-    }
-
-    const newWatcher = {
-      id: `${chatId}-${url}`,
-      chatId,
-      url,
-      delay,
-      active: true,
-      lastSearchDate: '2000-01-01T00:00:00.000Z'
-    }
-
-    if (!G_CHATS[chatId]) {
-      G_CHATS[chatId] = {
-        watchers: []
+    try {
+      const url = new URL(args[0])
+      if (!url.href.startsWith('https://www.leboncoin.fr/recherche?')) {
+        throw new Error('Invalid URL')
       }
+
+      url.searchParams.set("sort", "time")
+
+      const delay = Number(args[1]) || 300 // TODO: check for range min max and isInteger
+
+      const name = args[2] || url.searchParams.get("text") || '???'
+
+      const newWatcher = {
+        id: `${chatId}-${url}`,
+        chatId,
+        url: url.toString(), // urlString
+        delay,
+        name,
+        active: true,
+        lastSearchDate: '2000-01-01T00:00:00.000Z'
+      }
+
+      if (!G_CHATS[chatId]) {
+        G_CHATS[chatId] = {
+          watchers: []
+        }
+      }
+
+      newWatcher._pid = G_CHATS[chatId].watchers.length
+
+      G_CHATS[chatId].watchers = [ ...G_CHATS[chatId].watchers, newWatcher ]
+
+      persistDumpFile()
+
+      startWatcher(newWatcher)
+
+      Bot.sendMessage(chatId, formatWatcher(newWatcher), { parse_mode: 'MarkdownV2' })
+    } catch (error) {
+      Bot.sendMessage(chatId, error.message)
     }
 
-    newWatcher._pid = G_CHATS[chatId].watchers.length
-
-    G_CHATS[chatId].watchers = [ ...G_CHATS[chatId].watchers, newWatcher ]
-
-    persistDumpFile()
-
-    startWatcher(newWatcher)
-
-    Bot.sendMessage(chatId, `<${newWatcher._pid}> Now watching [${url}] every ${delay} seconds.`)
   })
 
-  // /setdelay <pid> <delay>
-  Bot.onText(/^\/setdelay (\d+) (\d+)/, (msg, match) => {
+  // /setname <pid> <name>
+  Bot.onText(/^\/setname (\d+) (\w+)/, (msg, match) => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
-    const delay = Number(match[2])
+    const name = match[2]
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
 
-    if (delay < 60) {
-      Bot.sendMessage(chatId, 'ERROR: INVALID_DELAY: [60-99999]')
+    if (!name) {
+      Bot.sendMessage(chatId, 'ERROR: INVALID_NAME')
       return
     }
 
     const watcher = thisChatWatchers[pid]
-    watcher.delay = delay
+    watcher.name = name
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, `<${pid}> is now set to be watched every ${delay} seconds`)
+    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /stop <pid>
@@ -152,7 +176,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -168,7 +192,7 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, `<${pid}> is now 'stopped'`)
+    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /start <pid>
@@ -178,7 +202,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -194,7 +218,7 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
-    Bot.sendMessage(chatId, `<${pid}> is now 'active'`)
+    Bot.sendMessage(chatId, formatWatcher(watcher), { parse_mode: 'MarkdownV2' })
   })
 
   // /del <pid>
@@ -204,7 +228,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -285,6 +309,7 @@ const persistDumpFile = async () => {
         chatId: watcher.chatId,
         url: watcher.url,
         delay: watcher.delay,
+        name: watcher.name,
         active: watcher.active,
         lastSearchDate: watcher.lastSearchDate
       }))
