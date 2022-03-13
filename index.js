@@ -18,11 +18,13 @@ const nameMaxLength = 15
 const ellipsis = (s, maxLength = 10) => s.length > maxLength ? s.split('', maxLength - 3).reduce((o, c) => o.length === maxLength - 4 ? `${o}${c}...` : `${o}${c}` , '') : s
 
 const formatPid = pid => (' '.repeat(3) + pid).slice(-3)
-const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength).replace('...', '\\.\\.\\.')
-const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6).replace(/(>|~)/g, '\\$1')
+const formatName = name => (ellipsis(name, nameMaxLength) + ' '.repeat(nameMaxLength)).slice(0, nameMaxLength)
+const formatDelay = delay => (' '.repeat(6) + (delay >= 3600 ? `>${Math.floor(delay/3600)}h` : `~${Math.round(delay/60)}min`)).slice(-6)
 const formatStatus = active => active ? 'active ' : 'stopped'
 
-const formatWatcherIdentifier = w => `${w.chatId}-<${w._pid}>-${w.name}`
+const formatWatcherIdentifier = w => `${w.chatId}-<${formatPid(w._pid)}>-${formatName(w.name)}`
+
+const filterDeletedWatchers = watcher => !!watcher === true
 
 // == ENVIRONEMENT ==
 const ENV = {
@@ -36,7 +38,8 @@ const ENV = {
   WATCHER_DUMP_FILE_PATH: process.env.WATCHER_DUMP_FILE_PATH || path.join(__dirname, 'dump.json'),
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-  TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET)
+  TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET),
+  WATCHER_MAX_RETRIES_BEFORE_ABORT: 3,
 }
 
 // == GLOBALS == //
@@ -75,13 +78,18 @@ const setupBot = Bot => {
   const inlineCodeBlock = '`'
   const codeBlock = '```'
 
-  const formatWatcherAsMarkdown = w => `| ${formatPid(w._pid)} | ${formatName(w.name)} | ${formatDelay(w.delay)} | ${formatStatus(w.active)} |`.replace(/\|/g, '\\|')
+  const formatWatcherAsMarkdown = w => `| ${formatPid(w._pid)} | ${formatName(w.name).replace('...', '\\.\\.\\.')} | ${formatDelay(w.delay).replace(/(>|~)/g, '\\$1')} | ${formatStatus(w.active)} |`.replace(/\|/g, '\\|')
   const formatWatcherInInlineCodeBlock = w => `${inlineCodeBlock}${formatWatcherAsMarkdown(w)}${inlineCodeBlock}`
 
   const formatWatchersAsMarkdownTable = watchers => {
     const header = `| PID | NAME            |  DELAY | STATUS  |`.replace(/\|/g, '\\|')
 
-    return `${codeBlock}\n${header}\n${watchers.map(formatWatcherAsMarkdown).join('\n')}${codeBlock}`
+    const formattedWatchers = watchers
+      .filter(filterDeletedWatchers)
+      .map(formatWatcherAsMarkdown)
+      .join('\n')
+
+    return `${codeBlock}\n${header}\n${formattedWatchers}${codeBlock}`
   }
 
   // /list | /ls (alias)
@@ -153,7 +161,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -178,7 +186,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -190,7 +198,7 @@ const setupBot = Bot => {
       return
     }
 
-    watcher.active = false
+    stopWatcher(watcher)
 
     persistDumpFile()
 
@@ -204,7 +212,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -220,6 +228,8 @@ const setupBot = Bot => {
 
     persistDumpFile()
 
+    startWatcher(watcher)
+
     Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
 
@@ -230,7 +240,7 @@ const setupBot = Bot => {
 
     const thisChatWatchers = G_CHATS[chatId].watchers
 
-    if (!pid || pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, `ERROR: INVALID_PID`)
       return
     }
@@ -259,8 +269,15 @@ const setupBot = Bot => {
 
       const thisChatWatchers = G_CHATS[chatId].watchers
 
-      // FLAG Watcher to get deleted during watch loop
-      thisChatWatchers[pid]._SHOULD_BE_DELETED = true
+      const watcher = thisChatWatchers[pid]
+
+      console.log(`[${formatWatcherIdentifier(watcher)}] DELETE, Aborting watcher...`)
+      watcher._SHOULD_BE_DELETED = true // TODO: this is supposed to be 'just in case'
+
+      stopWatcher(watcher)
+      delete G_CHATS[watcher.chatId].watchers[pid]
+
+      persistDumpFile()
 
       Bot.sendMessage(chatId, `<${pid}> Deleted`)
     }
@@ -305,7 +322,7 @@ const persistDumpFile = async () => {
     const content = Object.values(G_CHATS)
       .map(chat => chat.watchers)
       .reduce((prev, current) => [...prev, ...current], [])
-      .filter(watcher => !!watcher === true) // remove empty (deleted) watchers
+      .filter(filterDeletedWatchers)
       .map(watcher => ({
         id: watcher.id,
         chatId: watcher.chatId,
@@ -419,26 +436,8 @@ const debugHandler = async watcher => {
 const watcherHandler = async watcher => {
   const page = watcher._page
 
-  if (watcher._retries > 3) {
-    console.log(`[${formatWatcherIdentifier(watcher)}] Too much retries, aborting watcher...`)
-    watcher.active = false
-    persistDumpFile()
-    page.close()
-    return
-  }
-
-  if (watcher._SHOULD_BE_DELETED) {
-    console.log(`[${formatWatcherIdentifier(watcher)}] DELETE, Aborting watcher...`)
-    page.close()
-    delete G_CHATS[watcher.chatId].watchers[watcher._pid]
-    persistDumpFile()
-    return
-  }
-
-  if (!watcher.active) {
-    console.log(`[${formatWatcherIdentifier(watcher)}] STOPPED, Closing page...`)
-    delete page
-    page.close()
+  if (!watcher.active || watcher._page.isClosed() || watcher._SHOULD_BE_DELETED) {
+    console.log(`[${formatWatcherIdentifier(watcher)}] !watcher.active || watcher._page.isClosed() || watcher._SHOULD_BE_DELETED, aborting watcher...`)
     return
   }
 
@@ -450,45 +449,48 @@ const watcherHandler = async watcher => {
     // Datadome
     const iambot = await datadomeHandler(watcher)
 
-    if (!iambot) {
-      // Cookies
-      await cookiesHandler(watcher)
+    if (iambot) { throw new Error('Datadome: I am a bot!') }
 
-      await page.waitForSelector('script#__NEXT_DATA__')
-      const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
-      const offers = JSON.parse(datas)
-        .props.pageProps.searchData.ads
-        .map(parseOffer)
+    // Cookies
+    await cookiesHandler(watcher)
 
-      const lastSearchDate = new Date(watcher.lastSearchDate)
+    await page.waitForSelector('script#__NEXT_DATA__')
+    const datas = await page.evaluate(() => document.querySelector('script#__NEXT_DATA__').innerHTML)
+    const offers = JSON.parse(datas)
+      .props.pageProps.searchData.ads
+      .map(parseOffer)
 
-      // HANDLE results
-      const newOffers = offers
-        .filter(o => new Date(o.date) > lastSearchDate)
-        .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
+    const lastSearchDate = new Date(watcher.lastSearchDate)
 
-      console.log(`[${formatWatcherIdentifier(watcher)}] Found ${newOffers.length} new offers`)
+    // HANDLE results
+    const newOffers = offers
+      .filter(o => new Date(o.date) > lastSearchDate)
+      .sort((o1, o2) => new Date(o1.date) < new Date(o2.date)) // by date, newest first
 
-      if (newOffers.length >= 1) {
-        watcher.lastSearchDate = newOffers[0].date
-        persistDumpFile()
-      }
+    console.log(`[${formatWatcherIdentifier(watcher)}] Found ${newOffers.length} new offers`)
 
-      // TELEGRAM MESSAGES
-      if (newOffers.length > 0 && newOffers.length < 5) {
-        newOffers.forEach(o => {
-          G_BOT.sendMessage(watcher.chatId, `
-            New offer ${o.title}
-            Date: ${o.date}
-            Price: ${o.price} €
-            Where: ${o.where}
-            ${o.link}
-          `)
-        })
-      } else if (newOffers.length >= 5) {
-        G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)
-      }
+    if (newOffers.length >= 1) {
+      watcher.lastSearchDate = newOffers[0].date
+      persistDumpFile()
     }
+
+    // TELEGRAM MESSAGES
+    if (newOffers.length > 0 && newOffers.length < 5) {
+      newOffers.forEach(o => {
+        G_BOT.sendMessage(watcher.chatId, `
+          New offer ${o.title}
+          Date: ${o.date}
+          Price: ${o.price} €
+          Where: ${o.where}
+          ${o.link}
+        `)
+      })
+    } else if (newOffers.length >= 5) {
+      G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)
+    }
+
+    // reset _retries counter
+    watcher._retries = 0
 
     // New search after random delay (between -10 and 10 seconds)
     const randomSeconds = Math.random() * 20 - 10
@@ -497,18 +499,35 @@ const watcherHandler = async watcher => {
     console.log(`[${formatWatcherIdentifier(watcher)}] Next search in ${ms / 1000} seconds`)
     await wait(ms)
 
-    watcher._retries = 0
     watcherHandler(watcher)
   } catch (error) {
     console.error(`[${formatWatcherIdentifier(watcher)}] Error: ${error.message}, Retrying..`)
+
     watcher._retries++
+
+    if (watcher._retries > ENV.WATCHER_MAX_RETRIES_BEFORE_ABORT) {
+      console.log(`[${formatWatcherIdentifier(watcher)}] Too much retries, aborting watcher...`)
+      G_BOT.sendMessage(watcher.chatId, `<${watcher._pid}> Aborted after too much retries, try to restart it with /start command.`)
+
+      stopWatcher(watcher)
+      return
+    }
+
     watcherHandler(watcher)
   }
 }
 
+const stopWatcher = async watcher => {
+  watcher.active = false
+
+  watcher._page.close() // This will make eventual current page navigations to fail because page.isClosed()
+  // delete watcher._page
+  console.log(`[${formatWatcherIdentifier(watcher)}] Stopping. Closing page...`)
+}
+
 const startWatcher = async watcher => {
   // OPEN PAGE (once)
-  console.log(`[${formatWatcherIdentifier(watcher)}] New page`)
+  console.log(`[${formatWatcherIdentifier(watcher)}] Starting. Opening new page...`)
   const page = await G_BROWSER.newPage()
 
   page.setDefaultTimeout(60 * 1000) // 1 min
