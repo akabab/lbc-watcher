@@ -3,12 +3,11 @@ const fs = require('fs')
 const fsp = require('fs').promises
 const path = require('path')
 const { spawn } = require('child_process')
-
+const puppeteer = require('puppeteer-core')
+const TelegramBot = require('node-telegram-bot-api')
 // const { createCursor, installMouseHelper } = require('ghost-cursor')
 
-const puppeteer = require('puppeteer-core')
-
-const TelegramBot = require('node-telegram-bot-api')
+const datadome = require('./lib/datadome')
 
 require('dotenv').config()
 
@@ -397,10 +396,43 @@ const cookiesHandler = async watcher => {
 }
 
 const datadomeHandler = async watcher => {
-  console.log('im a bot')
-  await wait(20000)
+  console.log(`[${formatWatcherIdentifier(watcher)}] I am a bot...`)
 
-  throw new Error('Datadome: I am a bot!')
+  const page = watcher._page
+
+  const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
+  const frame = await captchaIframeElementHandle.contentFrame()
+
+
+  await frame.waitForSelector('.geetest_radar_tip')
+
+  await frame.waitForTimeout(1000)
+
+  const radarElementHandle = await frame.$('.geetest_radar_tip') //[aria-label="Incomplet"]')
+
+  const radarAriaLabelValue = await frame.evaluate(radar => radar.getAttribute('aria-label'), radarElementHandle)
+
+  if (radarAriaLabelValue === "Cliquer pour vérifier") { // "Incomplet -> image canvas already opened"
+    await radarElementHandle.click()
+  }
+
+  let tries = 0
+  const maxTries = DATADOME_GEETEST_MAX_TRIES
+  while (tries++ < maxTries) {
+    console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest...`)
+    if (await datadome.solveGeetestCaptcha(page, frame)) {
+      console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest succeed after ${tries} tries!`)
+      return
+    }
+
+    await frame.waitForTimeout(1500)
+    const refreshElementHandle = await frame.$('.geetest_refresh_1')
+    await refreshElementHandle.click()
+    console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest failed, retrying...`)
+    await frame.waitForTimeout(1500)
+  }
+
+  throw new Error(`Datadome failed to solve Geetest after MAX_TRY: ${maxTries} tries`)
 }
 
 const debugHandler = async watcher => {
@@ -436,14 +468,26 @@ const watcherHandler = async watcher => {
   console.log(`[${formatWatcherIdentifier(watcher)}] New search...`)
 
   try {
-    const options = { waitUntil: 'domcontentloaded' }
+    const options = { waitUntil: 'load' }
 
     await (page.url() === watcher.url ? page.reload(options) : page.goto(watcher.url, options))
+
+    // PAGE IS FULLY LOADED -- important if iframe
 
     // Datadome
     const dd = await page.$('meta[content^="https://img.datadome.co/captcha"')
 
-    if (dd) { await datadomeHandler(watcher) }
+    if (dd) {
+      try {
+        await datadomeHandler(watcher)
+      } catch (e) {
+        console.error(`[${formatWatcherIdentifier(watcher)}] Error: ${error.message}, Stoping watcher..`)
+        stopWatcher(watcher)
+        G_BOT.sendMessage(watcher.chatId, `<${watcher._pid}> They know I'm a bot.. Aborted after too much retries, try to restart it with /start command.`)
+        return
+      }
+      await page.waitForNavigation()
+    }
 
     // Cookies
     await wait(1500)
