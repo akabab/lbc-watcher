@@ -111,8 +111,8 @@ const setupBot = Bot => {
 
     try {
       const url = new URL(args[0])
-      if (!url.href.startsWith('https://www.leboncoin.fr/recherche?')) {
-        throw new Error('Invalid URL')
+      if (!url.href.startsWith('https://www.leboncoin.fr/')) {
+        throw new Error('INVALID_URL')
       }
 
       url.searchParams.set('sort', 'time')
@@ -120,7 +120,7 @@ const setupBot = Bot => {
       const delay = Number(args[1]) || 300
 
       if (!Number.isInteger(delay) || delay < 60) {
-        throw new Error('Invalid DELAY [60-99999]')
+        throw new Error('INVALID_DELAY [60-99999]')
       }
 
       const name = args[2] || url.searchParams.get('text') || '???'
