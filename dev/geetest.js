@@ -5,16 +5,10 @@ const datadomeHandler = async page => {
   const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
   const frame = await captchaIframeElementHandle.contentFrame()
 
-  let tries = 0
-  const maxTries = 15
-  while (tries++ < maxTries) {
-    if (await datadome.solveGeetestCaptcha(page, frame)) {
-      console.log(`Succeed in ${tries} tries`)
-      return
-    }
-  }
-
-  console.log(`Failed after ${tries} tries`)
+  const solveAfterNthTries = process.env.TRIES || 10
+  console.log(`Will try to solve in ${solveAfterNth} tries`)
+  const triesToSolve = await datadome.solveGeetestCaptcha(page, frame, solveAfterNthTries)
+  console.log(`Solved in ${triesToSolve} tries`)
 }
 
 const run = async () => {
@@ -40,12 +34,9 @@ const run = async () => {
     try {
       await datadomeHandler(page)
     } catch (e) {
-      // Handle dd failed to resolve captcha
       console.error(e)
     }
   }
-
-  console.log('DONE')
 
   await browser.close()
 }
