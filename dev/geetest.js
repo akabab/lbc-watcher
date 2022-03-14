@@ -95,7 +95,7 @@ const solveCaptcha = async (page, frame) => {
   await saveSliderCaptchaImages(frame)
   await saveDiffImage()
 
-  await frame.waitForTimeout(200) // else file isn't save
+  await frame.waitForTimeout(100) // just in case file might not be written yet
 
   const [cx/* , cy */] = await findDiffPosition()
 
@@ -141,17 +141,19 @@ const datadomeHandler = async page => {
 
   await frame.waitForTimeout(1000)
 
-  const radarElementHandle = await frame.$('.geetest_radar_tip') //[aria-label="Incomplet"]')
-
-  const radarAriaLabelValue = await frame.evaluate(radar => radar.getAttribute('aria-label'), radarElementHandle)
-
-  if (radarAriaLabelValue === "Cliquer pour vérifier") { // "Incomplet -> image canvas already opened"
-    await radarElementHandle.click()
-  }
-
   let tries = 0
-  const maxTries = 5
-  while (tries < maxTries) {
+  const maxTries = 15
+  while (tries++ < maxTries) {
+    const radarElementHandle = await frame.$('.geetest_radar_tip')
+    const radarAriaLabelValue = await frame.evaluate(radar => radar.getAttribute('aria-label'), radarElementHandle)
+
+    if (radarAriaLabelValue === "Cliquer pour vérifier") {
+      await radarElementHandle.click()
+    } else if (radarAriaLabelValue === "Erreur") {
+      const resetElementHandle = await frame.$('.geetest_reset_tip_content')
+      await resetElementHandle.click()
+    } /* else { "Incomplet -> image canvas already opened" } */
+
     if (await solveCaptcha(page, frame)) {
       console.log(`Succeed in ${tries} tries`)
       return
@@ -160,10 +162,8 @@ const datadomeHandler = async page => {
     await frame.waitForTimeout(1500)
     const refreshElementHandle = await frame.$('.geetest_refresh_1')
     await refreshElementHandle.click()
-    console.log('retry')
     await frame.waitForTimeout(1500)
-    FAKE_OFFSET += 5
-    tries++
+    FAKE_OFFSET += 1
   }
 
   console.log(`Failed after ${tries} tries`)
