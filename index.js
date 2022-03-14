@@ -182,6 +182,33 @@ const setupBot = Bot => {
     Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
   })
 
+  // /setdelay <pid> <delay>
+  Bot.onText(/^\/setdelay (\d+) (\d+)/, (msg, match) => {
+    const chatId = msg.chat.id
+    const pid = Number(match[1])
+    const delay = Number(match[2])
+
+    const thisChatWatchers = G_CHATS[chatId].watchers
+
+    if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
+      Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
+      return
+    }
+
+    if (!Number.isInteger(delay) || delay < 60 || delay > 99999) {
+      Bot.sendMessage(chatId, 'ERROR: INVALID_DELAY [60-99999]')
+      return
+    }
+
+    const watcher = thisChatWatchers[pid]
+
+    watcher.delay = delay
+
+    persistDumpFile()
+
+    Bot.sendMessage(chatId, formatWatcherInInlineCodeBlock(watcher), { parse_mode: 'MarkdownV2' })
+  })
+
   // /stop <pid>
   Bot.onText(/^\/stop (\d+)$/, (msg, match) => {
     const chatId = msg.chat.id
