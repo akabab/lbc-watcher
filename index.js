@@ -431,32 +431,15 @@ const datadomeHandler = async watcher => {
   const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
   const frame = await captchaIframeElementHandle.contentFrame()
 
-  await frame.waitForSelector('.geetest_radar_tip')
-
-  await frame.waitForTimeout(1000)
-
-  const radarElementHandle = await frame.$('.geetest_radar_tip') //[aria-label="Incomplet"]')
-
-  const radarAriaLabelValue = await frame.evaluate(radar => radar.getAttribute('aria-label'), radarElementHandle)
-
-  if (radarAriaLabelValue === "Cliquer pour vérifier") { // "Incomplet -> image canvas already opened"
-    await radarElementHandle.click()
-  }
-
   let tries = 0
   const maxTries = ENV.DATADOME_GEETEST_MAX_TRIES
   while (tries++ < maxTries) {
     console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest...`)
+
     if (await datadome.solveGeetestCaptcha(page, frame)) {
       console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest succeed after ${tries} tries!`)
       return
     }
-
-    await frame.waitForTimeout(1500)
-    const refreshElementHandle = await frame.$('.geetest_refresh_1')
-    await refreshElementHandle.click()
-    console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest failed, retrying...`)
-    await frame.waitForTimeout(1500)
   }
 
   throw new Error(`Datadome failed to solve Geetest after MAX_TRY: ${maxTries} tries`)
