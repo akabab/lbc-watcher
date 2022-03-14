@@ -480,7 +480,7 @@ const watcherHandler = async watcher => {
     if (dd) {
       try {
         await datadomeHandler(watcher)
-      } catch (e) {
+      } catch (error) {
         console.error(`[${formatWatcherIdentifier(watcher)}] Error: ${error.message}, Stoping watcher..`)
         stopWatcher(watcher)
         G_BOT.sendMessage(watcher.chatId, `<${watcher._pid}> They know I'm a bot.. Aborted after too much retries, try to restart it with /start command.`)
