@@ -99,6 +99,8 @@ const solveCaptcha = async (page, frame) => {
 
   const [cx/* , cy */] = await findDiffPosition()
 
+  if (cx === NaN) { cx = 0 } // /!\ sometimes it happens -- resolve will fail
+
   const sliderHandle = await frame.$('.geetest_slider_button')
   const handle = await sliderHandle.boundingBox()
 
