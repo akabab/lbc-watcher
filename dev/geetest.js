@@ -4,8 +4,10 @@ const Jimp = require('jimp')
 const pixelmatch = require('pixelmatch')
 const { cv } = require('opencv-wasm')
 
-const findPuzzlePosition = async page => {
-  const images = await page.$$eval('.geetest_canvas_img canvas', canvases => canvases.map(canvas => canvas.toDataURL().replace(/^data:image\/png;base64,/, '')))
+let FAKE_OFFSET = -10
+
+const findPuzzlePosition = async frame => {
+  const images = await frame.$$eval('.geetest_canvas_img canvas', canvases => canvases.map(canvas => canvas.toDataURL().replace(/^data:image\/png;base64,/, '')))
 
   await fs.writeFile('./puzzle.png', images[1], 'base64')
 
@@ -31,9 +33,7 @@ const findPuzzlePosition = async page => {
   return [Math.floor(moment.m10 / moment.m00), Math.floor(moment.m01 / moment.m00)]
 }
 
-const findDiffPosition = async page => {
-  await page.waitFor(100)
-
+const findDiffPosition = async () => {
   const srcImage = await Jimp.read('./diff.png')
   const src = cv.matFromImageData(srcImage.bitmap)
 
@@ -60,18 +60,10 @@ const findDiffPosition = async page => {
   return [Math.floor(moment.m10 / moment.m00), Math.floor(moment.m01 / moment.m00)]
 }
 
-const saveSliderCaptchaImages = async page => {
-  await page.waitForSelector('.tab-item.tab-item-1')
-  await page.click('.tab-item.tab-item-1')
-
-  await page.waitForSelector('[aria-label="Click to verify"]')
-  await page.waitFor(1000)
-
-  await page.click('[aria-label="Click to verify"]')
-
-  await page.waitForSelector('.geetest_canvas_img canvas', { visible: true })
-  await page.waitFor(1000)
-  const images = await page.$$eval('.geetest_canvas_img canvas', canvases => {
+const saveSliderCaptchaImages = async frame => {
+  await frame.waitForSelector('.geetest_canvas_img canvas', { visible: true })
+  await frame.waitForTimeout(1000)
+  const images = await frame.$$eval('.geetest_canvas_img canvas', canvases => {
     return canvases.map(canvas => canvas.toDataURL().replace(/^data:image\/png;base64,/, ''))
   })
 
@@ -89,26 +81,25 @@ const saveDiffImage = async () => {
   const diffOptions = { includeAA: true, threshold: 0.2 }
 
   pixelmatch(originalImage.bitmap.data, captchaImage.bitmap.data, diffImage.bitmap.data, width, height, diffOptions)
-  diffImage.write('./diff.png')
+  await diffImage.write('./diff.png')
 }
 
-const run = async () => {
-  const browser = await puppeteer.launch({
-    headless: false,
-    defaultViewport: { width: 1366, height: 768 }
-  })
-  const page = await browser.newPage()
+const unlinkFiles = async () => {
+  await fs.unlink('./original.png')
+  await fs.unlink('./captcha.png')
+  await fs.unlink('./diff.png')
+  await fs.unlink('./puzzle.png')
+}
 
-  await page.goto('https://www.geetest.com/en/demo', { waitUntil: 'networkidle2' })
-
-  await page.waitFor(1000)
-
-  await saveSliderCaptchaImages(page)
+const solveCaptcha = async (page, frame) => {
+  await saveSliderCaptchaImages(frame)
   await saveDiffImage()
 
-  const [cx/* , cy */] = await findDiffPosition(page)
+  await frame.waitForTimeout(200) // else file isn't save
 
-  const sliderHandle = await page.$('.geetest_slider_button')
+  const [cx/* , cy */] = await findDiffPosition()
+
+  const sliderHandle = await frame.$('.geetest_slider_button')
   const handle = await sliderHandle.boundingBox()
 
   let xPosition = handle.x + handle.width / 2
@@ -120,22 +111,87 @@ const run = async () => {
   yPosition = handle.y + handle.height / 3
   await page.mouse.move(xPosition, yPosition, { steps: 25 })
 
-  await page.waitFor(100)
+  await frame.waitForTimeout(100)
 
-  const [cxPuzzle/* , cyPuzzle */] = await findPuzzlePosition(page)
+  const [cxPuzzle/* , cyPuzzle */] = await findPuzzlePosition(frame)
 
-  xPosition = xPosition + cx - cxPuzzle
+  xPosition = xPosition + cx - cxPuzzle + (FAKE_OFFSET)
   yPosition = handle.y + handle.height / 2
   await page.mouse.move(xPosition, yPosition, { steps: 5 })
   await page.mouse.up()
 
-  await page.waitFor(3000)
-  // success!
+  // Will throw if success popup not appearing
+  try {
+    await frame.waitForSelector('.geetest_ghost_success.geetest_success_animate', { timeout: 3000 })
+    await unlinkFiles()
+    return true
+  } catch (e) {
+    await unlinkFiles()
+    return false
+  }
+}
 
-  await fs.unlink('./original.png')
-  await fs.unlink('./captcha.png')
-  await fs.unlink('./diff.png')
-  await fs.unlink('./puzzle.png')
+const datadomeHandler = async page => {
+  const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
+  const frame = await captchaIframeElementHandle.contentFrame()
+
+  await frame.waitForSelector('.geetest_radar_tip')
+
+  await frame.waitForTimeout(1000)
+
+  const radarElementHandle = await frame.$('.geetest_radar_tip') //[aria-label="Incomplet"]')
+
+  const radarAriaLabelValue = await frame.evaluate(radar => radar.getAttribute('aria-label'), radarElementHandle)
+
+  if (radarAriaLabelValue === "Cliquer pour vérifier") { // "Incomplet -> image canvas already opened"
+    await radarElementHandle.click()
+  }
+
+  let tries = 0
+  const maxTries = 5
+  while (tries < maxTries) {
+    if (await solveCaptcha(page, frame)) {
+      console.log(`Succeed in ${tries} tries`)
+      return
+    }
+
+    await frame.waitForTimeout(1500)
+    const refreshElementHandle = await frame.$('.geetest_refresh_1')
+    await refreshElementHandle.click()
+    console.log('retry')
+    await frame.waitForTimeout(1500)
+    FAKE_OFFSET += 5
+    tries++
+  }
+
+  console.log(`Failed after ${tries} tries`)
+}
+
+const run = async () => {
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null, //{ width: 1920, height: 768 },
+    args: [
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process'
+    ]
+  })
+  const page = await browser.newPage()
+
+  await page.goto('https://www.leboncoin.fr')
+
+  const dd = await page.$('meta[content^="https://img.datadome.co/captcha"')
+
+  if (dd) {
+    try {
+      await datadomeHandler(page)
+    } catch (e) {
+      // Handle dd failed to resolve captcha
+      console.error(e)
+    }
+  }
+
+  console.log('DONE')
 
   await browser.close()
 }

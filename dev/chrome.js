@@ -12,7 +12,7 @@ process.on('exit', () => {
 })
 
 const ENV = {
-  CHROME_BINARY: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  CHROME_BINARY: '/Applications/Google Chrome Dev.app/Contents/MacOS/Google Chrome',
   CHROME_REMOTE_PORT: 9229,
   CHROME_LOGS_FILE_PATH: './chrome.log'
 }
