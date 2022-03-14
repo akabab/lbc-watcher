@@ -2,9 +2,9 @@ const TelegramBot = require('node-telegram-bot-api')
 const Bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true })
 
 const G_WATCHERS = [
-  { pid: 0, name: 'dewalt', delay: 312, active: true, url: 'https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time' },
-  { pid: 1, name: 'van', delay: 14 * 3600 + 512, active: false, url: 'https://www.leboncoin.fr/recherche?category=5&text=VAN%20OR%20KANGOO%20OR%20CADDY%20OR%20BERLINGO%20OR%20PARTNER%20OR%20TRAFFIC%20OR%20TRAVELER%20OR%20L1H1&locations=r_26&price=5000-15000&mileage=min-170000&sort=time' },
-  { pid: 123, name: 'facomORfacoORfalcomORfalcolm', delay: 35 * 60, active: true, url: 'https://www.leboncoin.fr/recherche?text=scie&locations=r_26&sort=time' }
+  { pid: 0, name: 'dewalt', delay: 312, active: true, link: 'https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time' },
+  { pid: 1, name: 'van', delay: 14 * 3600 + 512, active: false, link: 'https://www.leboncoin.fr/recherche?category=5&text=VAN%20OR%20KANGOO%20OR%20CADDY%20OR%20BERLINGO%20OR%20PARTNER%20OR%20TRAFFIC%20OR%20TRAVELER%20OR%20L1H1&locations=r_26&price=5000-15000&mileage=min-170000&sort=time' },
+  { pid: 123, name: 'facomORfacoORfalcomORfalcolm', delay: 35 * 60, active: true, link: 'https://www.leboncoin.fr/recherche?text=scie&locations=r_26&sort=time' }
 ]
 
 const G_MOCK_OFFER = {
