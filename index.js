@@ -40,7 +40,8 @@ const ENV = {
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET),
-  WATCHER_MAX_RETRIES_BEFORE_ABORT: 3
+  WATCHER_MAX_RETRIES_BEFORE_ABORT: 3,
+  DATADOME_GEETEST_MAX_TRIES: 5
 }
 
 // == GLOBALS == //
@@ -403,7 +404,6 @@ const datadomeHandler = async watcher => {
   const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
   const frame = await captchaIframeElementHandle.contentFrame()
 
-
   await frame.waitForSelector('.geetest_radar_tip')
 
   await frame.waitForTimeout(1000)
@@ -417,7 +417,7 @@ const datadomeHandler = async watcher => {
   }
 
   let tries = 0
-  const maxTries = DATADOME_GEETEST_MAX_TRIES
+  const maxTries = ENV.DATADOME_GEETEST_MAX_TRIES
   while (tries++ < maxTries) {
     console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest...`)
     if (await datadome.solveGeetestCaptcha(page, frame)) {
