@@ -9,13 +9,13 @@ const G_WATCHERS = [
 
 const G_MOCK_OFFER = {
   id: 2123631347,
-  date: "2022-03-05 08:16:01 GMT+0100",
-  title: "Scie circulaire",
-  description: "A vendre scie circulaire 25€\nEn très bon état.\nVisible sur Saint-Louis Roche Maigre.",
+  date: '2022-03-05 08:16:01 GMT+0100',
+  title: 'Scie circulaire',
+  description: 'A vendre scie circulaire 25€\nEn très bon état.\nVisible sur Saint-Louis Roche Maigre.',
   price: 80,
-  where: "Le Tampon",
-  link: "https://www.leboncoin.fr/outillage_materiaux_2nd_oeuvre/2104299369.htm",
-  image: "https://img.leboncoin.fr/api/v1/lbcpb1/images/e9/0b/65/e90b65876cca76148a7d5bb55b5a77af69893a2a.jpg?rule=ad-large"
+  where: 'Le Tampon',
+  link: 'https://www.leboncoin.fr/outillage_materiaux_2nd_oeuvre/2104299369.htm',
+  image: 'https://img.leboncoin.fr/api/v1/lbcpb1/images/e9/0b/65/e90b65876cca76148a7d5bb55b5a77af69893a2a.jpg?rule=ad-large'
 }
 
 Bot.on('polling_error', error => { console.error(error) })
