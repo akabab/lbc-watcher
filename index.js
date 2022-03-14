@@ -360,7 +360,7 @@ const loadDumpFile = async () => {
 
 // == SEARCH == //
 const parseOffer = offer => ({
-  id: String(offer.list_id),
+  id: offer.list_id,
   date: `${offer.index_date} GMT+0100`,
   title: offer.subject,
   description: offer.body,
@@ -516,14 +516,9 @@ const watcherHandler = async watcher => {
 
     // TELEGRAM MESSAGES
     if (newOffers.length > 0 && newOffers.length < 5) {
-      newOffers.forEach(o => {
-        G_BOT.sendMessage(watcher.chatId, `
-          New offer ${o.title}
-          Date: ${o.date}
-          Price: ${o.price} €
-          Where: ${o.where}
-          ${o.link}
-        `)
+      newOffers.forEach(offer => {
+        const newOfferMessage = `🔥<${watcher._pid}> New offer <${watcher.name}>🔥\n\n${offer.date}\n\n${offer.title}\n${offer.price}€\n${offer.where}\n\n${offer.link}`
+        G_BOT.sendMessage(watcher.chatId, newOfferMessage)
       })
     } else if (newOffers.length >= 5) {
       G_BOT.sendMessage(watcher.chatId, `${newOffers.length} new offers, go to ${watcher.url}`)

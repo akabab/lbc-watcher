@@ -7,13 +7,33 @@ const G_WATCHERS = [
   { pid: 123, name: 'facomORfacoORfalcomORfalcolm', delay: 35 * 60, active: true, url: 'https://www.leboncoin.fr/recherche?text=scie&locations=r_26&sort=time' }
 ]
 
+const G_MOCK_OFFER = {
+  id: 2123631347,
+  date: "2022-03-05 08:16:01 GMT+0100",
+  title: "Scie circulaire",
+  description: "A vendre scie circulaire 25€\nEn très bon état.\nVisible sur Saint-Louis Roche Maigre.",
+  price: 80,
+  where: "Le Tampon",
+  link: "https://www.leboncoin.fr/outillage_materiaux_2nd_oeuvre/2104299369.htm",
+  image: "https://img.leboncoin.fr/api/v1/lbcpb1/images/e9/0b/65/e90b65876cca76148a7d5bb55b5a77af69893a2a.jpg?rule=ad-large"
+}
+
 Bot.on('polling_error', error => { console.error(error) })
 
 Bot.on('message', message => {
   console.log('MESSAGE', { message })
 })
 
-Bot.onText(/\/md/, message => {
+Bot.onText(/\/offer/, message => {
+  const watcher = G_WATCHERS[0]
+  const offer = G_MOCK_OFFER
+
+  const answer = `🔥<${watcher.pid}> New offer <${watcher.name}>🔥\n\n${offer.date}\n\n${offer.title}\n${offer.price}€\n${offer.where}\n\n${offer.link}`
+
+  Bot.sendMessage(message.chat.id, answer)
+})
+
+Bot.onText(/\/ls/, message => {
   const chatId = message.chat.id
 
   const nameMaxLength = 15
