@@ -4,6 +4,7 @@ const fsp = require('fs').promises
 const path = require('path')
 const { spawn } = require('child_process')
 const puppeteer = require('puppeteer-core')
+const Xvfb = require('xvfb')
 const TelegramBot = require('node-telegram-bot-api')
 // const { createCursor, installMouseHelper } = require('ghost-cursor')
 
@@ -30,6 +31,8 @@ const filterDeletedWatchers = watcher => !!watcher === true
 // == ENVIRONEMENT ==
 const ENV = {
   DEBUG_BOT: !!+process.env.DEBUG_BOT || false,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET),
   CHROME_IS_HEADLESS: !!+process.env.CHROME_IS_HEADLESS || false,
   CHROME_REMOTE_PORT: process.env.CHROME_REMOTE_PORT || 9222,
   CHROME_BINARY_PATH: process.env.CHROME_BINARY_PATH || '/usr/bin/google-chrome-stable',
@@ -38,15 +41,17 @@ const ENV = {
   CHROME_WINDOW_SIZE: process.env.CHROME_WINDOW_SIZE || '1920,1080',
   WATCHER_DUMP_FILE_PATH: process.env.WATCHER_DUMP_FILE_PATH || path.join(__dirname, 'dump.json'),
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-  TELEGRAM_BOT_POLLING_OFFSET: Number(process.env.TELEGRAM_BOT_POLLING_OFFSET),
   WATCHER_MAX_RETRIES_BEFORE_ABORT: 3,
-  DATADOME_GEETEST_MAX_TRIES: 5
+  DATADOME_GEETEST_MAX_TRIES: 5,
+  WINDOW_WIDTH: 1280,
+  WINDOW_HEIGHT: 800
 }
 
 // == GLOBALS == //
 let G_BROWSER_PROCESS
 let G_BROWSER
+
+let G_XVFB
 
 let G_BOT
 
@@ -56,6 +61,8 @@ const G_CHATS = {}
 process.on('exit', () => {
   // If a child process exists, kill it
   G_BROWSER_PROCESS?.kill()
+
+  G_XVFB?.stopSync()
 })
 
 // == TELEGRAM ==
@@ -613,15 +620,26 @@ const debugbotHandler = async () => {
 }
 
 const main = async () => {
+  G_XVFB = new Xvfb({
+    // silent: true,
+    xvfb_args: ['-screen', '0', `${ENV.WINDOW_WIDTH}x${ENV.WINDOW_HEIGHT}x24`, '-ac'] // https://manpages.debian.org/testing/xvfb/xvfb-run.1.en.html
+  })
+
+  G_XVFB.startSync()
+
+  console.log('XVFB started', { G_XVFB })
+
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   const command = ENV.CHROME_BINARY_PATH
   const args = [
     ENV.CHROME_IS_HEADLESS ? '--headless' : '',
-    // `--display=${display._display}`,
     `--user-data-dir=${ENV.CHROME_USER_DATA_DIR}`,
     `--remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`,
     '--no-first-run',
-    '--no-default-browser-check'
+    '--no-default-browser-check',
+    '--window-position=0,0',
+    `--window-size=${ENV.WINDOW_WIDTH},${ENV.WINDOW_HEIGHT}`,
+    `--display=${G_XVFB._display}`
   ]
   const stderr = fs.openSync(ENV.CHROME_LOGS_FILE_PATH, 'w')
   const options = {
