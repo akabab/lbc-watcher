@@ -431,7 +431,7 @@ const cookiesHandler = async watcher => {
 }
 
 const datadomeHandler = async watcher => {
-  console.log(`[${formatWatcherIdentifier(watcher)}] I am a bot...`)
+  console.error(`[${formatWatcherIdentifier(watcher)}] I am a bot...`)
 
   const page = watcher._page
 
