@@ -16,7 +16,7 @@ process.on('exit', () => {
 })
 
 const ENV = {
-  CHROME_BINARY: '/Users/ycribier/Applications/Google Chrome Dev.app/Contents/MacOS/Google Chrome',
+  CHROME_BINARY_PATH: process.env.CHROME_BINARY_PATH || '/Users/ycribier/Applications/Google Chrome Dev.app/Contents/MacOS/Google Chrome',
   CHROME_REMOTE_PORT: 9229,
   CHROME_LOGS_FILE_PATH: './chrome.log'
 }
@@ -57,7 +57,7 @@ const main = async () => {
 
   console.log('XVFB started', { G_XVFB })
 
-  const command = ENV.CHROME_BINARY
+  const command = ENV.CHROME_BINARY_PATH
   const args = [
     `--remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`,
     '--user-data-dir=/tmp/cuud/',
