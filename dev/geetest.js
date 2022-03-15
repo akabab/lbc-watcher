@@ -6,7 +6,7 @@ const datadomeHandler = async page => {
   const frame = await captchaIframeElementHandle.contentFrame()
 
   const solveAfterNthTries = Number(process.env.TRIES) || 10
-  console.log(`Will try to solve in ${solveAfterNthTries} tries`)
+  console.log(`Will try to solve in ${solveAfterNthTries} TRIES (set ENV variable)`)
   const triesToSolve = await datadome.solveGeetestCaptcha(page, frame, solveAfterNthTries)
   console.log(`Solved in ${triesToSolve} tries`)
 }
