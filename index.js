@@ -43,8 +43,9 @@ const ENV = {
   WATCHER_DEFAULT_DELAY_IN_SECONDS: Number(process.env.WATCHER_DEFAULT_DELAY_IN_SECONDS),
   WATCHER_MAX_RETRIES_BEFORE_ABORT: 3,
   DATADOME_GEETEST_MAX_TRIES: 5,
-  WINDOW_WIDTH: 1280,
-  WINDOW_HEIGHT: 800
+  WINDOW_WIDTH: Number(process.env.WINDOW_WIDTH) || 1280,
+  WINDOW_HEIGHT: Number(process.env.WINDOW_HEIGHT) || 800,
+  SHOULD_USE_XVFB: !!+process.env.SHOULD_USE_XVFB || false
 }
 
 // == GLOBALS == //
@@ -593,14 +594,18 @@ const debugbotHandler = async () => {
 }
 
 const main = async () => {
-  G_XVFB = new Xvfb({
-    // silent: true,
-    xvfb_args: ['-screen', '0', `${ENV.WINDOW_WIDTH}x${ENV.WINDOW_HEIGHT}x24`, '-ac'] // https://manpages.debian.org/testing/xvfb/xvfb-run.1.en.html
-  })
+  if (!process.env.DISPLAY || ENV.SHOULD_USE_XVFB) {
+    // https://manpages.debian.org/testing/xvfb/xvfb-run.1.en.html
+    const xvfbArgs = `-screen 0 ${ENV.WINDOW_WIDTH}x${ENV.WINDOW_HEIGHT}x24 -ac -nolisten unix`.split(' ') // -nolisten tcp ?
 
-  G_XVFB.startSync()
+    G_XVFB = new Xvfb({
+      silent: process.env.DEBUG,
+      xvfb_args: xvfbArgs
+    })
 
-  console.log('XVFB started', { G_XVFB })
+    G_XVFB.startSync()
+    console.log(`X Virtual Frame Buffer (XVFB) server started on display [${G_XVFB._display}]`)
+  }
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   const command = ENV.CHROME_BINARY_PATH
@@ -611,15 +616,15 @@ const main = async () => {
     '--no-first-run',
     '--no-default-browser-check',
     '--window-position=0,0',
-    `--window-size=${ENV.WINDOW_WIDTH},${ENV.WINDOW_HEIGHT}`,
-    `--display=${G_XVFB._display}`
+    G_XVFB ? `--window-size=${ENV.WINDOW_WIDTH},${ENV.WINDOW_HEIGHT}` : '',
+    G_XVFB ? `--display=${G_XVFB._display}` : ''
   ]
   const stderr = fs.openSync(ENV.CHROME_LOGS_FILE_PATH, 'w')
   const options = {
     stdio: ['ignore', 'ignore', stderr]
   }
 
-  console.log('Launching browser...', command)
+  console.log('Launching browser...', `${command} ${args.join(' ')}`)
   G_BROWSER_PROCESS = spawn(command, args, options)
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
