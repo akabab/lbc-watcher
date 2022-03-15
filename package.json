@@ -24,11 +24,12 @@
     "node-telegram-bot-api": "^0.56.0",
     "opencv-wasm": "^4.3.0-10",
     "pixelmatch": "^5.2.1",
-    "puppeteer-core": "^13.5.0"
+    "puppeteer-core": "^13.5.0",
+    "xvfb": "^0.4.0"
   },
   "devDependencies": {
-    "puppeteer": "^10.4.0",
     "nodemon": "^2.0.15",
+    "puppeteer": "^13.5.0",
     "snazzy": "^9.0.0",
     "standard": "^16.0.4"
   }
