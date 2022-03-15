@@ -438,18 +438,9 @@ const datadomeHandler = async watcher => {
   const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
   const frame = await captchaIframeElementHandle.contentFrame()
 
-  let tries = 0
-  const maxTries = ENV.DATADOME_GEETEST_MAX_TRIES
-  while (tries++ < maxTries) {
-    console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest...`)
-
-    if (await datadome.solveGeetestCaptcha(page, frame)) {
-      console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest succeed after ${tries} tries!`)
-      return
-    }
-  }
-
-  throw new Error(`Datadome failed to solve Geetest after MAX_TRY: ${maxTries} tries`)
+  console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest...`)
+  const tries = await datadome.solveGeetestCaptcha(page, frame)
+  console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest succeed after ${tries} tries!`)
 }
 
 const debugHandler = async watcher => {
