@@ -104,7 +104,12 @@ const setupBot = Bot => {
   Bot.onText(/^(\/list|\/ls)$/, msg => {
     const chatId = msg.chat.id
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     const message = thisChatWatchers.length > 0
       ? formatWatchersAsMarkdownTable(thisChatWatchers)
@@ -170,7 +175,12 @@ const setupBot = Bot => {
     const pid = Number(match[1])
     const name = match[2]
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
@@ -196,7 +206,12 @@ const setupBot = Bot => {
     const pid = Number(match[1])
     const delay = Number(match[2])
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
@@ -222,7 +237,12 @@ const setupBot = Bot => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
@@ -246,7 +266,12 @@ const setupBot = Bot => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
@@ -274,7 +299,12 @@ const setupBot = Bot => {
     const chatId = msg.chat.id
     const pid = Number(match[1])
 
-    const thisChatWatchers = G_CHATS[chatId].watchers
+    const thisChat = G_CHATS[chatId]
+    if (!thisChat) {
+      Bot.sendMessage('ERROR: INVALID REQUEST')
+      return
+    }
+    const thisChatWatchers = thisChat.watchers
 
     if (pid < 0 || pid >= thisChatWatchers.length || !thisChatWatchers[pid]) {
       Bot.sendMessage(chatId, 'ERROR: INVALID_PID')
@@ -303,7 +333,12 @@ const setupBot = Bot => {
       const chatId = query.message.chat.id
       const pid = Number(query.data.split(' ')[1])
 
-      const thisChatWatchers = G_CHATS[chatId].watchers
+      const thisChat = G_CHATS[chatId]
+      if (!thisChat) {
+        Bot.sendMessage('ERROR: INVALID REQUEST')
+        return
+      }
+      const thisChatWatchers = thisChat.watchers
 
       const watcher = thisChatWatchers[pid]
 
