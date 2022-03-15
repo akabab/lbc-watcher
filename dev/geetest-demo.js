@@ -22,7 +22,7 @@ const run = async () => {
   const geetestCaptchaElementHandle = await page.waitForSelector('.tab-item.tab-item-1')
   await geetestCaptchaElementHandle.click()
 
-  const solveAfterNthTries = process.env.TRIES || 10
+  const solveAfterNthTries = Number(process.env.TRIES) || 10
   console.log(`Will try to solve in ${solveAfterNthTries} tries`)
 
   try {
