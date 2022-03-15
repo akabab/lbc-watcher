@@ -443,22 +443,6 @@ const datadomeHandler = async watcher => {
   console.log(`[${formatWatcherIdentifier(watcher)}] Datadome solving Geetest succeed after ${tries} tries!`)
 }
 
-const debugHandler = async watcher => {
-  const page = watcher._page
-
-  page.on('request', async r => {
-    if (watcher.url === r._initializer.url) {
-      console.log(watcher.id, 'REQUEST', { headers: await r.allHeaders() })
-    }
-  })
-
-  page.on('response', async r => {
-    if (watcher.url === r._initializer.url) {
-      console.log(watcher.id, 'RESPONSE', { statusCode: r.status(), headers: await r.allHeaders() })
-    }
-  })
-}
-
 const watcherHandler = async watcher => {
   const page = watcher._page
 
@@ -583,8 +567,6 @@ const startWatcher = async watcher => {
   // Add a 'ghost' cursor to the page object
   // page.humanclick = createCursor(page) //, await getRandomPagePoint(page), false)
   // await installMouseHelper(page)
-
-  if (process.env.DEBUG) { debugHandler(watcher) }
 
   watcher._page = page
   watcher._retries = 0
