@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1983292230-https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time",
+    "chatId": 1983292230,
+    "url": "https://www.leboncoin.fr/recherche?text=dewalt&locations=r_26&sort=time",
+    "delay": 120,
+    "name": "dewalt",
+    "active": true,
+    "lastSearchDate": "2000-01-01 00:00:00 GMT+0100"
+  },
+  {
+    "id": "1983292230-https://www.leboncoin.fr/recherche?text=Container+OR+conteneur+OR+containeur+NOT+terrain+NOT+location&locations=r_26&sort=time&search_in=subject",
+    "chatId": 1983292230,
+    "url": "https://www.leboncoin.fr/recherche?text=Container+OR+conteneur+OR+containeur+NOT+terrain+NOT+location&locations=r_26&sort=time&search_in=subject",
+    "delay": 300,
+    "name": "Container OR conteneur OR containeur NOT terrain NOT location",
+    "active": true,
+    "lastSearchDate": "2000-01-01 00:00:00 GMT+0100"
+  }
+]
