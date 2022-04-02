@@ -1,14 +1,16 @@
 const puppeteer = require('puppeteer')
-const datadome = require('../lib/datadome')
+const Datadome = require('../lib/datadome')
 
-const datadomeHandler = async page => {
+const datadomeHandler = async (browser, page) => {
   const captchaIframeElementHandle = await page.$('iframe[src^="https://geo.captcha-delivery.com/captcha/"')
-  const frame = await captchaIframeElementHandle.contentFrame()
+  const ddCaptchaUrl = await page.evaluate(eh => eh.getAttribute('src'), captchaIframeElementHandle)
+  const newPage = await browser.newPage()
+  await newPage.goto(ddCaptchaUrl)
 
-  const solveAfterNthTries = Number(process.env.TRIES) || 10
-  console.log(`Will try to solve in ${solveAfterNthTries} TRIES (set ENV variable)`)
-  const triesToSolve = await datadome.solveGeetestCaptcha(page, frame, solveAfterNthTries)
-  console.log(`Solved in ${triesToSolve} tries`)
+  // Datadome valid cookie token
+  const token = await Datadome.getNewToken(newPage)
+
+  console.log(`New token: ${token}`)
 }
 
 const run = async () => {
@@ -32,7 +34,7 @@ const run = async () => {
 
   if (dd) {
     try {
-      await datadomeHandler(page)
+      await datadomeHandler(browser, page)
     } catch (e) {
       console.error(e)
     }
