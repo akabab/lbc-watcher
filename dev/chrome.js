@@ -44,7 +44,7 @@ const getBrowserWSEndpoint = async () => {
 }
 
 const main = async () => {
-  const command = ENV.CHROME_BINARY
+  const command = ENV.CHROME_BINARY_PATH
   const args = [
     `--remote-debugging-port=${ENV.CHROME_REMOTE_PORT}`,
     '--user-data-dir=/tmp/cuud/',
