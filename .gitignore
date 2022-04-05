@@ -8,6 +8,7 @@ node_modules/
 cuud/
 screens/
 *watchers.json
+*backup.json
 .env*
 *.log
 *.png

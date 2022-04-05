@@ -11,20 +11,37 @@ const Telegram = require('./lib/telegram')
 const Db = require('./lib/db')
 const Watcher = require('./lib/watcher')
 const { wait } = require('./lib/helpers')
+const { terminate } = require('./lib/errors')
 
-// == GLOBALS == //
+// -- GLOBALS
 let G_BROWSER_PROCESS
 let G_BROWSER
 let G_XVFB
 
-// /!\ Execute this early (top of a file) in case of an internal crash
-process.on('exit', () => {
-  // If a child process exists, kill it
-  G_BROWSER_PROCESS?.kill()
-  G_XVFB?.stopSync()
-})
+// -- ERRORS HANDLING --
 
-// == WS ENDPOINT == //
+// /!\ Execute this early (top of a file) in case of an internal crash
+const doBeforeExit = async () => {
+  // force to save the watchers
+  await Db.save(Env.WATCHER_DUMP_FILE_PATH, { shouldExecuteNow: true })
+  // + save a backup file
+  await Db.save(Env.WATCHER_BACKUP_FILE_PATH, { shouldExecuteNow: true })
+  
+  await G_BROWSER.close()
+  // just in case, try to kill sub-process, even if it should be killed on process exit
+  G_BROWSER_PROCESS?.kill()
+  
+  G_XVFB?.stopSync()
+}
+
+const exitHandler = terminate(doBeforeExit)
+
+process.on('uncaughtException', exitHandler(1, 'Unexpected Error'))
+process.on('unhandledRejection', exitHandler(1, 'Unhandled Promise'))
+process.on('SIGTERM', exitHandler(0, 'SIGTERM'))
+process.on('SIGINT', exitHandler(0, 'SIGINT'))
+
+// -- ENDPOINT
 const getBrowserWSEndpoint = async () => {
   const filePath = Env.CHROME_LOGS_FILE_PATH
 
@@ -102,6 +119,16 @@ const main = async () => {
 
   console.log('Launching browser...', `${command} ${args.join(' ')}`)
   G_BROWSER_PROCESS = spawn(command, args, options)
+
+  const browserProcessExitHandler = (code, reason) => {
+    console.error(reason)
+    process.kill(process.pid, "SIGTERM")
+  }
+
+  G_BROWSER_PROCESS.on('uncaughtException', () => browserProcessExitHandler(1, 'CHROME: Unexpected Error'))
+  G_BROWSER_PROCESS.on('unhandledRejection', () => browserProcessExitHandler(1, 'CHROME: Unhandled Promise'))
+  G_BROWSER_PROCESS.on('SIGTERM', () => browserProcessExitHandler(0, 'CHROME: SIGTERM'))
+  G_BROWSER_PROCESS.on('SIGINT', () => browserProcessExitHandler(0, 'CHROME: SIGINT'))
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
