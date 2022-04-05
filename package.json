@@ -24,6 +24,7 @@
     "node-telegram-bot-api": "^0.56.0",
     "opencv-wasm": "^4.3.0-10",
     "pixelmatch": "^5.2.1",
+    "proxy-chain": "^1.0.4",
     "puppeteer-core": "^13.5.0",
     "xvfb": "^0.4.0"
   },

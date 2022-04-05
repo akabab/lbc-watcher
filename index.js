@@ -4,6 +4,7 @@ const { spawn } = require('child_process')
 const puppeteer = require('puppeteer-core')
 const Xvfb = require('xvfb')
 const TelegramBot = require('node-telegram-bot-api')
+const ProxyChain = require('proxy-chain')
 
 const Env = require('./lib/env')
 const Telegram = require('./lib/telegram')
@@ -82,10 +83,12 @@ const main = async () => {
 
   // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
   const command = Env.CHROME_BINARY_PATH
+  const proxy =  Env.CHROME_PROXY_URL && await ProxyChain.anonymizeProxy(Env.CHROME_PROXY_URL)
   const args = [
     Env.CHROME_IS_HEADLESS ? '--headless' : '',
     `--user-data-dir=${Env.CHROME_USER_DATA_DIR}`,
     `--remote-debugging-port=${Env.CHROME_REMOTE_PORT}`,
+    proxy ? `--proxy-server=${proxy}` : '',
     '--no-first-run',
     '--no-default-browser-check',
     '--window-position=0,0',
