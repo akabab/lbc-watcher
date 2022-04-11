@@ -112,6 +112,7 @@ const main = async () => {
     proxy ? `--proxy-server=${proxy}` : '',
     '--no-first-run',
     '--no-default-browser-check',
+    '--disable-session-crashed-bubble',
     '--window-position=0,0',
     G_XVFB ? `--window-size=${Env.WINDOW_WIDTH},${Env.WINDOW_HEIGHT}` : '',
     G_XVFB ? `--display=${G_XVFB._display}` : ''
