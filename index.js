@@ -27,11 +27,12 @@ const doBeforeExit = async () => {
   // + save a backup file
   await Db.save(Env.WATCHER_BACKUP_FILE_PATH, { shouldExecuteNow: true })
   
-  await G_BROWSER.close()
   // just in case, try to kill sub-process, even if it should be killed on process exit
   G_BROWSER_PROCESS?.kill()
   
   G_XVFB?.stopSync()
+
+  process.exit(0)
 }
 
 const exitHandler = terminate(doBeforeExit)
@@ -39,7 +40,10 @@ const exitHandler = terminate(doBeforeExit)
 process.on('uncaughtException', exitHandler(1, 'Unexpected Error'))
 process.on('unhandledRejection', exitHandler(1, 'Unhandled Promise'))
 process.on('SIGTERM', exitHandler(0, 'SIGTERM'))
-process.on('SIGINT', exitHandler(0, 'SIGINT'))
+// process.on('SIGINT', exitHandler(0, 'SIGINT')) // Ctrl+C
+
+console.log(`Main process start pid: [${process.pid}]`)
+
 
 // -- ENDPOINT
 const getBrowserWSEndpoint = async () => {
@@ -121,14 +125,11 @@ const main = async () => {
   G_BROWSER_PROCESS = spawn(command, args, options)
 
   const browserProcessExitHandler = (code, reason) => {
-    console.error(reason)
+    console.error(`Browser exit`, reason)
     process.kill(process.pid, "SIGTERM")
   }
 
-  G_BROWSER_PROCESS.on('uncaughtException', () => browserProcessExitHandler(1, 'CHROME: Unexpected Error'))
-  G_BROWSER_PROCESS.on('unhandledRejection', () => browserProcessExitHandler(1, 'CHROME: Unhandled Promise'))
-  G_BROWSER_PROCESS.on('SIGTERM', () => browserProcessExitHandler(0, 'CHROME: SIGTERM'))
-  G_BROWSER_PROCESS.on('SIGINT', () => browserProcessExitHandler(0, 'CHROME: SIGINT'))
+  G_BROWSER_PROCESS.on('exit', () => browserProcessExitHandler(0, 'CHROME: exit'))
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
