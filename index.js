@@ -1,5 +1,6 @@
 // == DEPENDENCIES ==
 const fs = require('fs')
+const findProcess = require('find-process')
 const { spawn } = require('child_process')
 const puppeteer = require('puppeteer-core')
 const Xvfb = require('xvfb')
@@ -102,7 +103,11 @@ const main = async () => {
     console.log(`X Virtual Frame Buffer (XVFB) server started on display [${G_XVFB._display}]`)
   }
 
-  // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
+  // Make sure to kill all ghost browsers (from previous crashes) listenning on needed port
+  const ghostBrowsers = await findProcess('port', Env.CHROME_REMOTE_PORT)
+  ghostBrowsers.map(ps => process.kill(ps.pid))
+
+  // Launch (spawn) browser
   const command = Env.CHROME_BINARY_PATH
   const proxy =  Env.CHROME_PROXY_URL && await ProxyChain.anonymizeProxy(Env.CHROME_PROXY_URL)
   const args = [
