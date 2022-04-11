@@ -1,5 +1,6 @@
 // == DEPENDENCIES ==
 const fs = require('fs')
+const findProcess = require('find-process')
 const { spawn } = require('child_process')
 const puppeteer = require('puppeteer-core')
 const Xvfb = require('xvfb')
@@ -11,20 +12,41 @@ const Telegram = require('./lib/telegram')
 const Db = require('./lib/db')
 const Watcher = require('./lib/watcher')
 const { wait } = require('./lib/helpers')
+const { terminate } = require('./lib/errors')
 
-// == GLOBALS == //
+// -- GLOBALS
 let G_BROWSER_PROCESS
 let G_BROWSER
 let G_XVFB
 
-// /!\ Execute this early (top of a file) in case of an internal crash
-process.on('exit', () => {
-  // If a child process exists, kill it
-  G_BROWSER_PROCESS?.kill()
-  G_XVFB?.stopSync()
-})
+// -- ERRORS HANDLING --
 
-// == WS ENDPOINT == //
+// /!\ Execute this early (top of a file) in case of an internal crash
+const doBeforeExit = async () => {
+  // force to save the watchers
+  await Db.save(Env.WATCHER_DUMP_FILE_PATH, { shouldExecuteNow: true })
+  // + save a backup file
+  await Db.save(Env.WATCHER_BACKUP_FILE_PATH, { shouldExecuteNow: true })
+  
+  // just in case, try to kill sub-process, even if it should be killed on process exit
+  G_BROWSER_PROCESS?.kill()
+  
+  G_XVFB?.stopSync()
+
+  process.exit(0)
+}
+
+const exitHandler = terminate(doBeforeExit)
+
+process.on('uncaughtException', exitHandler(1, 'Unexpected Error'))
+process.on('unhandledRejection', exitHandler(1, 'Unhandled Promise'))
+process.on('SIGTERM', exitHandler(0, 'SIGTERM'))
+// process.on('SIGINT', exitHandler(0, 'SIGINT')) // Ctrl+C
+
+console.log(`Main process start pid: [${process.pid}]`)
+
+
+// -- ENDPOINT
 const getBrowserWSEndpoint = async () => {
   const filePath = Env.CHROME_LOGS_FILE_PATH
 
@@ -81,7 +103,11 @@ const main = async () => {
     console.log(`X Virtual Frame Buffer (XVFB) server started on display [${G_XVFB._display}]`)
   }
 
-  // LAUNCH A BROWSER (ONLY 1 IS NECESSARY)
+  // Make sure to kill all ghost browsers (from previous crashes) listenning on needed port
+  const ghostBrowsers = await findProcess('port', Env.CHROME_REMOTE_PORT)
+  ghostBrowsers.map(ps => process.kill(ps.pid))
+
+  // Launch (spawn) browser
   const command = Env.CHROME_BINARY_PATH
   const proxy =  Env.CHROME_PROXY_URL && await ProxyChain.anonymizeProxy(Env.CHROME_PROXY_URL)
   const args = [
@@ -91,6 +117,7 @@ const main = async () => {
     proxy ? `--proxy-server=${proxy}` : '',
     '--no-first-run',
     '--no-default-browser-check',
+    '--disable-session-crashed-bubble',
     '--window-position=0,0',
     G_XVFB ? `--window-size=${Env.WINDOW_WIDTH},${Env.WINDOW_HEIGHT}` : '',
     G_XVFB ? `--display=${G_XVFB._display}` : ''
@@ -102,6 +129,13 @@ const main = async () => {
 
   console.log('Launching browser...', `${command} ${args.join(' ')}`)
   G_BROWSER_PROCESS = spawn(command, args, options)
+
+  const browserProcessExitHandler = (code, reason) => {
+    console.error(`Browser exit`, reason)
+    process.kill(process.pid, "SIGTERM")
+  }
+
+  G_BROWSER_PROCESS.on('exit', () => browserProcessExitHandler(0, 'CHROME: exit'))
 
   const browserWSEndpoint = await getBrowserWSEndpoint()
 
